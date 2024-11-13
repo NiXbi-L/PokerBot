@@ -182,7 +182,8 @@ class SelfPlay:
     def dqn_train_keras_rl(self, model_name):
         """Implementation of kreras-rl deep q learing."""
         from agents.agent_consider_equity import Player as EquityPlayer
-        from agents.agent_keras_rl_dqn import Player as DQNPlayer
+        # from agents.agent_keras_rl_dqn import Player as DQNPlayer
+        from agents.agent_torch_dqn import Player as DQNPlayer
         from agents.agent_random import Player as RandomPlayer
         env_name = 'neuron_poker-v0'
         env = gym.make(env_name, initial_stacks=self.stack, funds_plot=self.funds_plot, render=self.render,
@@ -192,16 +193,16 @@ class SelfPlay:
         env.seed(123)
         env.add_player(EquityPlayer(name='equity/50/70', min_call_equity=.5, min_bet_equity=.7))
         env.add_player(EquityPlayer(name='equity/20/30', min_call_equity=.2, min_bet_equity=.3))
-        env.add_player(RandomPlayer())
-        env.add_player(RandomPlayer())
-        env.add_player(RandomPlayer())
-        env.add_player(PlayerShell(name='keras-rl', stack_size=self.stack))  # shell is used for callback to keras rl
-
+        # env.add_player(RandomPlayer())
+        # env.add_player(RandomPlayer())
+        # env.add_player(RandomPlayer())
+        # env.add_player(PlayerShell(name='keras-rl', stack_size=self.stack))  # shell is used for callback to keras rl
+        env.add_player(PlayerShell(name='torch-rl', stack_size=self.stack)) 
         env.reset()
 
-        dqn = DQNPlayer()
-        dqn.initiate_agent(env)
-        dqn.train(env_name=model_name)
+        dqn = DQNPlayer(env=env)
+        # dqn.initiate_agent(env)
+        dqn.train(env_name='torch-rl')
 
     def dqn_play_keras_rl(self, model_name):
         """Create 6 players, one of them a trained DQN"""
@@ -229,7 +230,7 @@ class SelfPlay:
         from agents.agent_random import Player as RandomPlayer
         env_name = 'neuron_poker-v0'
         self.env = gym.make(env_name, initial_stacks=self.stack, render=self.render)
-        # self.env.add_player(EquityPlayer(name='equity/50/50', min_call_equity=.5, min_bet_equity=-.5))
+        self.env.add_player(EquityPlayer(name='equity/50/50', min_call_equity=.5, min_bet_equity=-.5))
         # self.env.add_player(EquityPlayer(name='equity/50/80', min_call_equity=.8, min_bet_equity=-.8))
         # self.env.add_player(EquityPlayer(name='equity/70/70', min_call_equity=.7, min_bet_equity=-.7))
         self.env.add_player(EquityPlayer(name='equity/20/30', min_call_equity=.2, min_bet_equity=-.3))

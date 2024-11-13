@@ -197,6 +197,7 @@ class HoldemTable(Env):
                         self._calculate_reward(action)
 
         else:  # action received from player shell (e.g. keras rl, not autoplay)
+            print('We are in the else of this function')
             self._get_environment()  # get legal moves
             if Action(action) not in self.legal_moves:
                 self._illegal_move(action)
