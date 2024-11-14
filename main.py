@@ -88,7 +88,7 @@ def command_line_parser():
 class SelfPlay:
     """Orchestration of playing against itself"""
 
-    def __init__(self, render, num_episodes, use_cpp_montecarlo, funds_plot, stack=500):
+    def __init__(self, render, num_episodes, use_cpp_montecarlo, funds_plot, stack=5):
         """Initialize"""
         self.winner_in_episodes = []
         self.use_cpp_montecarlo = use_cpp_montecarlo
@@ -186,7 +186,7 @@ class SelfPlay:
         from agents.agent_torch_dqn import Player as DQNPlayer
         from agents.agent_random import Player as RandomPlayer
         env_name = 'neuron_poker-v0'
-        env = gym.make(env_name, initial_stacks=self.stack, funds_plot=self.funds_plot, render=self.render,
+        env = gym.make(env_name, initial_stacks=5, funds_plot=self.funds_plot, render=self.render,
                        use_cpp_montecarlo=self.use_cpp_montecarlo)
 
         np.random.seed(123)
@@ -197,7 +197,7 @@ class SelfPlay:
         # env.add_player(RandomPlayer())
         # env.add_player(RandomPlayer())
         # env.add_player(PlayerShell(name='keras-rl', stack_size=self.stack))  # shell is used for callback to keras rl
-        env.add_player(PlayerShell(name='torch-rl', stack_size=self.stack)) 
+        env.add_player(PlayerShell(name='torch-rl', stack_size=5)) 
         env.reset()
 
         dqn = DQNPlayer(env=env)

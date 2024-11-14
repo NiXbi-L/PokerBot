@@ -7,7 +7,7 @@ from collections import deque
 from torch.utils.tensorboard import SummaryWriter
 import json
 import time
-from gym_env.enums import Action
+from gym_env.enums import Action, Stage
 import logging
 
 window_length = 1
@@ -72,6 +72,7 @@ class Player:
 
         total_steps = 0
         for episode in range(self.action_size):
+            print(f"Episode {episode}")
             state = self.env.reset()
             done = False
             episode_reward = 0
@@ -83,9 +84,11 @@ class Player:
                 #     print("ACTION TYPE", type(action))
                 # else:
                 action = self.action(self.env.legal_moves, state, None)
-                # action = self.act(state)  # Epsilon-greedy action selection
-                    
-
+                # print(action)
+                # logger.info(f"Action: {action}")
+                # if state == Stage.SHOWDOWN.value or state == Stage.SHOWDOWN:
+                #     quit()
+                print('Action', action)
                 next_state, reward, done, _ = self.env.step(action)
                 self.remember(state, action, reward, next_state, done)
                 state = next_state
@@ -177,6 +180,10 @@ class Player:
         this_player_action_space = {Action.FOLD, Action.CHECK, Action.CALL, Action.RAISE_POT, Action.RAISE_HALF_POT,
                                     Action.RAISE_2POT}
         allowed_actions = list(this_player_action_space.intersection(set(action_space)))
+        if Stage.SHOWDOWN in allowed_actions:
+            allowed_actions.remove(Stage.SHOWDOWN)
+        if Stage.SHOWDOWN.value in allowed_actions:
+            allowed_actions.remove(Stage.SHOWDOWN.value)
         state = torch.FloatTensor(observation).unsqueeze(0)
         
         # Get Q-values from the policy network for the current state
@@ -194,22 +201,6 @@ class Player:
         
         # action = random.choice(list(possible_moves))
         return action
-
-        # # Convert observation to a tensor
-        # state = torch.FloatTensor(observation).unsqueeze(0)
-        
-        # # Get Q-values from the policy network for the current state
-        # with torch.no_grad():
-        #     q_values = self.policy_net(state).squeeze().numpy()
-        
-        # # Filter Q-values to only include valid actions
-        # allowed_actions = list(action_space)
-        # masked_q_values = {action: q_values[action] for action in allowed_actions}
-
-        # # Select the action with the highest Q-value among allowed actions
-        # action = max(masked_q_values, key=masked_q_values.get)
-        
-        # return action
 
     def replay(self):
         """Train the agent with a batch of experiences"""

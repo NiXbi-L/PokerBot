@@ -64,7 +64,7 @@ class PlayerData:
 class HoldemTable(Env):
     """Pokergame environment"""
 
-    def __init__(self, initial_stacks=100, small_blind=1, big_blind=2, render=False, funds_plot=True,
+    def __init__(self, initial_stacks=5, small_blind=1, big_blind=2, render=False, funds_plot=True,
                  max_raises_per_player_round=2, use_cpp_montecarlo=False, raise_illegal_moves=False,
                  calculate_equity=False):
         """
@@ -630,7 +630,11 @@ class HoldemTable(Env):
             self.legal_moves.append(Action.CALL)
             self.legal_moves.append(Action.FOLD)
 
-        if self.current_player.num_raises_in_street[self.stage] < self.max_raises_per_player_round:
+        # if self.stage == Stage.SHOWDOWN and sum(self.current_player.num_raises_in_street.values()) < self.max_raises_per_player_round * :
+        if self.stage == Stage.SHOWDOWN:
+            pass
+        elif self.current_player.num_raises_in_street[self.stage] < self.max_raises_per_player_round:
+        # if self.current_player.num_raises_in_street.get(self.stage, 3) < self.max_raises_per_player_round:
             if self.current_player.stack >= 3 * self.big_blind - self.player_pots[self.current_player.seat]:
                 self.legal_moves.append(Action.RAISE_3BB)
 
