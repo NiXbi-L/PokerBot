@@ -176,7 +176,7 @@ class Player:
         """Mandatory method that calculates the move based on the observation array and the action space."""
         _ = observation  # not using the observation for random decision
         _ = info
-
+        # print(observation.shape)
         this_player_action_space = {Action.FOLD, Action.CHECK, Action.CALL, Action.RAISE_POT, Action.RAISE_HALF_POT,
                                     Action.RAISE_2POT}
         allowed_actions = list(this_player_action_space.intersection(set(action_space)))

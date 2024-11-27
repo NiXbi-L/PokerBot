@@ -9,6 +9,7 @@ Usage:
   main.py selfplay dqn_train [options]
   main.py selfplay dqn_play [options]
   main.py learn_table_scraping [options]
+  main.py selfplay ppo_train [options]
 
 options:
   -h --help                 Show this screen.
@@ -79,6 +80,9 @@ def command_line_parser():
 
         elif args['dqn_play']:
             runner.dqn_play_keras_rl(model_name)
+        
+        elif args['ppo_train']:
+            runner.ppo_train_torch_rl()
 
 
     else:
@@ -108,7 +112,7 @@ class SelfPlay:
         for _ in range(num_of_plrs):
             player = RandomPlayer()
             self.env.add_player(player)
-
+        # print(self.env.observation_space.shape[0])
         self.env.reset()
 
     def key_press_agents(self):
@@ -191,7 +195,7 @@ class SelfPlay:
 
         np.random.seed(123)
         env.seed(123)
-        env.add_player(EquityPlayer(name='equity/50/70', min_call_equity=.5, min_bet_equity=.7))
+        # env.add_player(EquityPlayer(name='equity/50/70', min_call_equity=.5, min_bet_equity=.7))
         env.add_player(EquityPlayer(name='equity/20/30', min_call_equity=.2, min_bet_equity=.3))
         # env.add_player(RandomPlayer())
         # env.add_player(RandomPlayer())
@@ -203,6 +207,22 @@ class SelfPlay:
         dqn = DQNPlayer(env=env)
         # dqn.initiate_agent(env)
         dqn.train(env_name='torch-rl')
+    
+    def ppo_train_torch_rl(self):
+        '''Implementation of torch-rl proximal policy optimization'''
+        from agents.agent_ppo import Player as PPOPlayer
+        from agents.agent_random import Player as RandomPlayer
+        env_name = 'neuron_poker-v0'
+        self.env = gym.make(env_name, initial_stacks=5, funds_plot=self.funds_plot, render=self.render,
+                          use_cpp_montecarlo=self.use_cpp_montecarlo)
+        np.random.seed(123)
+        self.env.seed(123)
+        self.env.add_player(RandomPlayer())
+        self.env.add_player(RandomPlayer())
+        self.env.add_player(PlayerShell(name='torch-ppo', stack_size=5))
+        self.env.reset()
+        ppo = PPOPlayer(env=self.env, action_size=self.env.action_space.n, state_size=self.env.observation_space[0])
+        ppo.train()
 
     def dqn_play_keras_rl(self, model_name):
         """Create 6 players, one of them a trained DQN"""
