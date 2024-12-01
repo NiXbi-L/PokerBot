@@ -209,6 +209,44 @@ class HoldemTable(Env):
 
             log.debug(f"Previous action reward for seat {self.acting_agent}: {self.reward}")
         return self.array_everything, self.reward, self.done, self.info
+    
+    def mcts_step(self, action):
+        """
+        Execute a step in the environment using the MCTS agent's chosen action.
+
+        Args:
+            action: The action chosen by the MCTS agent.
+
+        Returns:
+            A tuple (state, reward, done, info), where:
+                - state: The new state after taking the action.
+                - reward: The reward obtained from the action.
+                - done: A boolean indicating if the game has ended.
+                - info: Additional information from the environment.
+        """
+        # Reset reward and other variables for the step.
+        self.reward = 0
+        self.acting_agent = self.player_cycle.idx
+
+        # Get the current state and legal moves for the current agent.
+        self._get_environment()
+        if Action(action) not in self.legal_moves:
+            # Handle illegal moves if the action is not valid.
+            self._illegal_move(action)
+        else:
+            # Execute the step in the environment based on the chosen action.
+            self._execute_step(Action(action))
+            
+            # Update the state and reward after executing the step.
+            if self.first_action_for_hand[self.acting_agent] or self.done:
+                self.first_action_for_hand[self.acting_agent] = False
+                self._calculate_reward(action)
+
+        # Log the reward for debugging purposes.
+        log.debug(f"Previous action reward for seat {self.acting_agent}: {self.reward}")
+
+        # Return the updated state, reward, done status, and any additional info.
+        return self.array_everything, self.reward, self.done, self.info
 
     def _execute_step(self, action):
         self._process_decision(action)
@@ -449,6 +487,7 @@ class HoldemTable(Env):
     def _save_funds_history(self):
         """Keep track of player funds history"""
         funds_dict = {i: player.stack for i, player in enumerate(self.players)}
+        print("Funds history shape:", self.funds_history.shape)
         self.funds_history = pd.concat([self.funds_history, pd.DataFrame(funds_dict, index=[0])])
 
     def _check_game_over(self):
@@ -474,11 +513,12 @@ class HoldemTable(Env):
         log.info("Game over.")
         self.done = True
         player_names = [f"{i} - {player.name}" for i, player in enumerate(self.players)]
+        print(self.funds_history)
         self.funds_history.columns = player_names
         if self.funds_plot:
             self.funds_history.reset_index(drop=True).plot()
         log.info(self.funds_history)
-        plt.show()
+        # plt.show()
 
         winner_in_episodes.append(self.winner_ix)
         league_table = pd.Series(winner_in_episodes).value_counts()

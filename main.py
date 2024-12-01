@@ -10,6 +10,7 @@ Usage:
   main.py selfplay dqn_play [options]
   main.py learn_table_scraping [options]
   main.py selfplay ppo_train [options]
+  main.py selfplay mcts_agent [options]
 
 options:
   -h --help                 Show this screen.
@@ -83,7 +84,9 @@ def command_line_parser():
         
         elif args['ppo_train']:
             runner.ppo_train_torch_rl()
-
+        
+        elif args['mcts_agent']:
+            runner.mcts_agent()
 
     else:
         raise RuntimeError("Argument not yet implemented")
@@ -108,7 +111,8 @@ class SelfPlay:
         from agents.agent_random import Player as RandomPlayer
         env_name = 'neuron_poker-v0'
         num_of_plrs = 2
-        self.env = gym.make(env_name, initial_stacks=self.stack, render=self.render)
+        # self.env = gym.make(env_name, initial_stacks=self.stack, render=self.render)
+        self.env = gym.make(env_name, initial_stacks=5, render=self.render)
         for _ in range(num_of_plrs):
             player = RandomPlayer()
             self.env.add_player(player)
@@ -271,6 +275,80 @@ class SelfPlay:
         print(league_table)
         print(f"Best Player: {best_player}")
 
+    def mcts_agent(self, mode='train', num_episodes=1000):
+        """Create an environment with 2 random players and 1 MCTS player integrated with a neural network."""
+        from agents.agent_random import Player as RandomPlayer
+        from agents.agent_MCTS import Player as MCTSPlayer
+        from agents.agent_MCTS import MCTSNet, optim, deque, train_neural_network
+        import os
+        import torch
+        import time
+
+        env_name = 'neuron_poker-v0'
+        self.env = gym.make(env_name, initial_stacks=4, render=self.render)
+
+        self.env.add_player(PlayerShell(name='mcts-player', stack_size=4))
+        self.env.add_player(RandomPlayer())
+        self.env.add_player(RandomPlayer())
+        self.env.add_player(RandomPlayer())
+        self.env.add_player(RandomPlayer())
+        self.env.add_player(RandomPlayer())
+
+        self.env.reset()
+
+        try:
+            input_size = self.env.observation_space[0]
+            num_actions = self.env.action_space.n
+        except AttributeError as e:
+            print(f"Error accessing observation or action space: {e}")
+            return
+
+        neural_net = MCTSNet(input_size, num_actions)
+        optimizer = optim.Adam(neural_net.parameters(), lr=0.001)
+        replay_buffer = deque(maxlen=10000)
+        mcts_player = MCTSPlayer(self.env, neural_net, replay_buffer)
+        model_path = os.path.join('agents', 'mcts_net.pth')
+
+        # Load model weights if the file exists
+        if os.path.exists(model_path):
+            print(f"Loading model weights from {model_path}...")
+            neural_net.load_state_dict(torch.load(model_path))
+            neural_net.eval()
+
+        episode = 0
+        while episode < num_episodes:
+            print(f"Episode {episode + 1}/{num_episodes} - Starting...")
+            state = self.env.reset()
+            done = False
+
+            while not done:
+                action_space = self.env.legal_moves
+                action = mcts_player.action(action_space, state, None)
+                next_state, reward, done, _ = self.env.mcts_step(action)
+                replay_buffer.append((state, action, reward, next_state))
+                state = next_state
+
+            # Train the neural network every 3 episodes
+            if (episode + 1) % 3 == 0:
+                train_neural_network(neural_net, replay_buffer, optimizer, batch_size=32, gamma=0.995)
+                print(f"Episode {episode + 1}: Neural network trained")
+                torch.save(neural_net.state_dict(), model_path)
+                print(f"Model weights saved to {model_path}")
+                time.sleep(3)
+
+            # Log the winner of the episode
+            if self.env.winner_ix is not None:
+                self.winner_in_episodes.append(self.env.winner_ix)
+            else:
+                self.log.warning(f"Hand did not have a winner for episode {episode}.")
+            episode += 1
+
+        league_table = pd.Series(self.winner_in_episodes).value_counts()
+        best_player = league_table.index[0]
+        print("League Table")
+        print("============")
+        print(league_table)
+        print(f"Best Player: {best_player}")
 
 if __name__ == '__main__':
     command_line_parser()
