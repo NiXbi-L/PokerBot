@@ -6,20 +6,57 @@ from gym_env.enums import Action
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torch.nn.functional as F
 
 class MCTSNet(nn.Module):
     def __init__(self, input_size, num_actions):
         super(MCTSNet, self).__init__()
-        self.fc1 = nn.Linear(input_size, 128)
-        self.fc2 = nn.Linear(128, 128)
+        
+        # Input layer followed by multiple hidden layers for feature extraction
+        self.fc1 = nn.Linear(input_size, 512)
+        self.fc2 = nn.Linear(512, 256)
+        self.fc3 = nn.Linear(256, 128)
+        
+        # Recurrent layer for capturing sequential dependencies
+        self.lstm = nn.LSTM(128, 128, batch_first=True, dropout=0.3)
+        
+        # Attention mechanism to allow the model to focus on key features
+        self.attention = nn.MultiheadAttention(embed_dim=128, num_heads=4, dropout=0.1)
+        
+        # Policy and value heads for outputting action probabilities and state value
         self.policy_head = nn.Linear(128, num_actions)
         self.value_head = nn.Linear(128, 1)
 
+        # Dropout layers for regularization
+        self.dropout = nn.Dropout(0.5)
+
     def forward(self, x):
-        x = torch.relu(self.fc1(x))
-        x = torch.relu(self.fc2(x))
+        # Input layer with ReLU activation
+        x = F.relu(self.fc1(x))
+        x = self.dropout(x)
+        
+        x = F.relu(self.fc2(x))
+        x = self.dropout(x)
+        
+        x = F.relu(self.fc3(x))
+        x = self.dropout(x)
+        
+        # Prepare data for LSTM
+        # Assume x is reshaped to (batch_size, seq_length, input_size)
+        x, _ = self.lstm(x)
+
+        # Use the output from the last time step
+        x = x[:, :]  # Shape: (batch_size, 128)
+
+        # Apply attention mechanism to focus on important features
+        x = x.unsqueeze(0)  # Add a sequence dimension for attention input
+        attn_output, _ = self.attention(x, x, x)
+        x = attn_output.squeeze(0)
+
+        # Policy and value heads
         policy = torch.softmax(self.policy_head(x), dim=-1)
         value = self.value_head(x)
+
         return policy, value
 
 class MinMaxStats:
@@ -197,10 +234,15 @@ class MonteCarloTreeSearch:
 
 def train_neural_network(network, replay_buffer, optimizer, batch_size=32, gamma=0.995):
     if len(replay_buffer) < batch_size:
-        return  # Not enough data to train
+        print("Not enough data to train on")
+        return
 
     # Sample a batch from the replay buffer
-    batch = random.sample(replay_buffer, batch_size)
+    weights = [1 + i for i in range(len(replay_buffer))]  # Give more weight to recent experiences
+    weights = torch.tensor(weights, dtype=torch.float32)
+    weights /= weights.sum()
+    indices = torch.multinomial(weights, batch_size, replacement=True)
+    batch = [replay_buffer[i] for i in indices]
     states, actions, rewards, next_states = zip(*batch)
 
     # Convert to tensors
@@ -222,10 +264,11 @@ def train_neural_network(network, replay_buffer, optimizer, batch_size=32, gamma
     value_loss = nn.MSELoss()(values.squeeze(), targets)
 
     loss = policy_loss + value_loss
+    weighted_loss = (loss * weights[indices].unsqueeze(1)).mean()  # Apply the weight to each loss term
 
     # Backpropagation
     optimizer.zero_grad()
-    loss.backward()
+    weighted_loss.backward()
     optimizer.step()
 
 def train_mcts_and_network(env, neural_net, num_episodes=1000, batch_size=32, gamma=0.995, train_interval=10):

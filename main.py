@@ -279,15 +279,16 @@ class SelfPlay:
         """Create an environment with 2 random players and 1 MCTS player integrated with a neural network."""
         from agents.agent_random import Player as RandomPlayer
         from agents.agent_MCTS import Player as MCTSPlayer
-        from agents.agent_MCTS import MCTSNet, optim, deque, train_neural_network
+        from agents.agent_MCTS import MCTSNet, optim, train_neural_network, deque
         import os
-        import torch
         import time
+        import torch
+        import gym
 
         env_name = 'neuron_poker-v0'
-        self.env = gym.make(env_name, initial_stacks=4, render=self.render)
+        self.env = gym.make(env_name, initial_stacks=5, render=self.render)
 
-        self.env.add_player(PlayerShell(name='mcts-player', stack_size=4))
+        self.env.add_player(PlayerShell(name='mcts-player', stack_size=5))
         self.env.add_player(RandomPlayer())
         self.env.add_player(RandomPlayer())
         self.env.add_player(RandomPlayer())
@@ -305,7 +306,8 @@ class SelfPlay:
 
         neural_net = MCTSNet(input_size, num_actions)
         optimizer = optim.Adam(neural_net.parameters(), lr=0.001)
-        replay_buffer = deque(maxlen=10000)
+        replay_buffer = deque(maxlen=1000000)  # Store all episodes, size can be adjusted
+
         mcts_player = MCTSPlayer(self.env, neural_net, replay_buffer)
         model_path = os.path.join('agents', 'mcts_net.pth')
 
@@ -327,14 +329,13 @@ class SelfPlay:
                 next_state, reward, done, _ = self.env.mcts_step(action)
                 replay_buffer.append((state, action, reward, next_state))
                 state = next_state
-
-            # Train the neural network every 3 episodes
-            if (episode + 1) % 3 == 0:
-                train_neural_network(neural_net, replay_buffer, optimizer, batch_size=32, gamma=0.995)
-                print(f"Episode {episode + 1}: Neural network trained")
-                torch.save(neural_net.state_dict(), model_path)
-                print(f"Model weights saved to {model_path}")
-                time.sleep(3)
+            print(len(replay_buffer))
+            # Train the neural network after each episode
+            train_neural_network(neural_net, replay_buffer, optimizer, batch_size=32, gamma=0.995)
+            print(f"Episode {episode + 1}: Neural network trained")
+            torch.save(neural_net.state_dict(), model_path)
+            print(f"Model weights saved to {model_path}")
+            time.sleep(3)
 
             # Log the winner of the episode
             if self.env.winner_ix is not None:
@@ -343,12 +344,14 @@ class SelfPlay:
                 self.log.warning(f"Hand did not have a winner for episode {episode}.")
             episode += 1
 
+        # Print final league table
         league_table = pd.Series(self.winner_in_episodes).value_counts()
         best_player = league_table.index[0]
         print("League Table")
         print("============")
         print(league_table)
         print(f"Best Player: {best_player}")
+
 
 if __name__ == '__main__':
     command_line_parser()
