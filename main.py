@@ -322,14 +322,13 @@ class SelfPlay:
             print(f"Episode {episode + 1}/{num_episodes} - Starting...")
             state = self.env.reset()
             done = False
-
             while not done:
                 action_space = self.env.legal_moves
                 action = mcts_player.action(action_space, state, None)
                 next_state, reward, done, _ = self.env.mcts_step(action)
                 replay_buffer.append((state, action, reward, next_state))
                 state = next_state
-            print(len(replay_buffer))
+            print("Replay buffer has length: ", len(replay_buffer))
             # Train the neural network after each episode
             train_neural_network(neural_net, replay_buffer, optimizer, batch_size=32, gamma=0.995)
             print(f"Episode {episode + 1}: Neural network trained")

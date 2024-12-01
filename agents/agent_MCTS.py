@@ -11,8 +11,6 @@ import torch.nn.functional as F
 class MCTSNet(nn.Module):
     def __init__(self, input_size, num_actions):
         super(MCTSNet, self).__init__()
-        
-        # Input layer followed by multiple hidden layers for feature extraction
         self.fc1 = nn.Linear(input_size, 512)
         self.fc2 = nn.Linear(512, 256)
         self.fc3 = nn.Linear(256, 128)
@@ -22,16 +20,11 @@ class MCTSNet(nn.Module):
         
         # Attention mechanism to allow the model to focus on key features
         self.attention = nn.MultiheadAttention(embed_dim=128, num_heads=4, dropout=0.1)
-        
-        # Policy and value heads for outputting action probabilities and state value
         self.policy_head = nn.Linear(128, num_actions)
         self.value_head = nn.Linear(128, 1)
-
-        # Dropout layers for regularization
         self.dropout = nn.Dropout(0.5)
 
     def forward(self, x):
-        # Input layer with ReLU activation
         x = F.relu(self.fc1(x))
         x = self.dropout(x)
         
@@ -40,20 +33,13 @@ class MCTSNet(nn.Module):
         
         x = F.relu(self.fc3(x))
         x = self.dropout(x)
-        
-        # Prepare data for LSTM
-        # Assume x is reshaped to (batch_size, seq_length, input_size)
         x, _ = self.lstm(x)
+        x = x[:, :]
 
-        # Use the output from the last time step
-        x = x[:, :]  # Shape: (batch_size, 128)
-
-        # Apply attention mechanism to focus on important features
-        x = x.unsqueeze(0)  # Add a sequence dimension for attention input
+        # Apply attention
+        x = x.unsqueeze(0)
         attn_output, _ = self.attention(x, x, x)
         x = attn_output.squeeze(0)
-
-        # Policy and value heads
         policy = torch.softmax(self.policy_head(x), dim=-1)
         value = self.value_head(x)
 
@@ -153,6 +139,7 @@ class MonteCarloTreeSearch:
             
         action = np.random.choice(action_space_list, p=action_probabilities)
         next_state, reward, done, _ = self.env.mcts_step(action)
+        self.replay_buffer.append((node.state, action, reward, next_state))
 
         # Add experience to replay buffer
         self.replay_buffer.append((node.state, action, reward, next_state))
@@ -258,42 +245,40 @@ def train_neural_network(network, replay_buffer, optimizer, batch_size=32, gamma
 
     # Compute target values
     targets = rewards + gamma * next_values.squeeze()
-
-    # Loss calculation
     policy_loss = -torch.mean(torch.log(policies.gather(1, actions.unsqueeze(1))) * (targets - values.squeeze()))
     value_loss = nn.MSELoss()(values.squeeze(), targets)
 
     loss = policy_loss + value_loss
     weighted_loss = (loss * weights[indices].unsqueeze(1)).mean()  # Apply the weight to each loss term
 
-    # Backpropagation
+    # Backprop
     optimizer.zero_grad()
     weighted_loss.backward()
     optimizer.step()
 
-def train_mcts_and_network(env, neural_net, num_episodes=1000, batch_size=32, gamma=0.995, train_interval=10):
-    replay_buffer = deque(maxlen=10000)  # Size of the replay buffer
-    mcts = MonteCarloTreeSearch(env, neural_net, replay_buffer)
-    optimizer = optim.Adam(neural_net.parameters(), lr=0.001)
+# def train_mcts_and_network(env, neural_net, num_episodes=1000, batch_size=32, gamma=0.995, train_interval=10):
+#     replay_buffer = deque(maxlen=10000)  # Size of the replay buffer
+#     mcts = MonteCarloTreeSearch(env, neural_net, replay_buffer)
+#     optimizer = optim.Adam(neural_net.parameters(), lr=0.001)
 
-    for episode in range(num_episodes):
-        state = env.reset()
-        done = False
-        while not done:
-            action_space = env.legal_moves
-            action = mcts.search(state, action_space)
-            next_state, reward, done, _ = env.mcts_step(action)
+#     for episode in range(num_episodes):
+#         state = env.reset()
+#         done = False
+#         while not done:
+#             action_space = env.legal_moves
+#             action = mcts.search(state, action_space)
+#             next_state, reward, done, _ = env.mcts_step(action)
 
-            # Collect experience for training
-            replay_buffer.append((state, action, reward, next_state))
-            state = next_state
+#             # Collect experience for training
+#             replay_buffer.append((state, action, reward, next_state))
+#             state = next_state
 
-        # Periodically train the neural network
-        if episode % train_interval == 0:
-            train_neural_network(neural_net, replay_buffer, optimizer, batch_size=batch_size, gamma=gamma)
-            print(f"Episode {episode}: Network trained")
+#         # Periodically train the neural network
+#         if episode % train_interval == 0:
+#             train_neural_network(neural_net, replay_buffer, optimizer, batch_size=batch_size, gamma=gamma)
+#             print(f"Episode {episode}: Network trained")
 
-    print("Training complete.")
+#     print("Training complete.")
 
 class Player:
     def __init__(self, env, neural_net, replay_buffer, name='MCTS'):
