@@ -81,10 +81,8 @@ class Player:
             return random.choice(range(self.action_size)), torch.tensor(0.0)
 
         # Convert observation to tensor
-        # print(observation)
         state = torch.FloatTensor(observation).unsqueeze(0)
         state = torch.nan_to_num(state, nan=0.0)
-        # print(state)
         if torch.isnan(state).any():
             raise Exception("NaN detected in state")
         # Get action logits and state value from the policy network
@@ -96,14 +94,12 @@ class Player:
         for action in allowed_actions:
             mask[action.value] = 0  # Allow valid actions
         
-        # print(action_logits)
         # Apply the mask to the logits
         masked_logits = action_logits.squeeze() + mask
         
         # Check for NaNs in masked_logits
         if torch.isnan(action_logits).any():
             raise Exception("NaN detected in action_logits")
-        # print(masked_logits)
         # Create a probability distribution over the valid actions
         probs = torch.softmax(masked_logits, dim=-1)
         dist = Categorical(probs)
@@ -147,7 +143,6 @@ class Player:
         old_log_probs = torch.stack(self.log_probs)
         dones = torch.FloatTensor(self.dones)
         states = torch.nan_to_num(states, nan=0.0)
-        # print(states)
         if torch.isnan(states).any():
             raise Exception("NaN detected in states in learn")
         # Get values and action logits
@@ -168,8 +163,6 @@ class Player:
 
         # PPO loss
         ratios = torch.exp(log_probs - old_log_probs.detach())
-        # if log_probs - old_log_probs is below a threshold, use first order taylor expansion
-        # ratios_temp = log_probs - old_log_probs.detach()
         if torch.isnan(ratios).any():
             raise Exception("NaN detected in ratios_temp")
         surr1 = ratios * advantages
@@ -191,57 +184,6 @@ class Player:
         self.log_probs = []
         self.rewards = []
         self.dones = []
-    # def learn(self):
-    #     """Perform one training iteration."""
-    #     states = torch.FloatTensor(self.states)
-    #     actions = torch.LongTensor(self.actions)
-    #     old_log_probs = torch.stack(self.log_probs)
-    #     dones = torch.FloatTensor(self.dones)
-
-    #     # Get values and action logits
-    #     action_logits, values = self.model(states)
-    #     values = values.squeeze()
-
-    #     # Mask invalid actions (if needed during learning)
-    #     # Not necessary here if actions are already valid
-
-    #     dist = Categorical(torch.softmax(action_logits, dim=-1))
-    #     log_probs = dist.log_prob(actions)
-    #     entropy = dist.entropy()
-
-    #     # Compute returns and advantages
-    #     returns, advantages = self.compute_returns_and_advantages(values.detach().numpy())
-    #     returns = torch.FloatTensor(returns)
-    #     advantages = torch.FloatTensor(advantages)
-    #     advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
-
-    #     # PPO loss
-    #     ratios = torch.exp(log_probs - old_log_probs.detach())
-    #     surr1 = ratios * advantages
-    #     surr2 = torch.clamp(ratios, 1 - self.clip_epsilon, 1 + self.clip_epsilon) * advantages
-    #     actor_loss = -torch.min(surr1, surr2).mean()
-    #     critic_loss = self.critic_coeff * (returns - values).pow(2).mean()
-    #     entropy_loss = self.entropy_coeff * entropy.mean()
-
-    #     loss = actor_loss + critic_loss - entropy_loss
-
-    #     # Check for NaNs
-    #     if torch.isnan(loss):
-    #         raise Exception("NaN detected in loss. Stopping training.")
-
-    #     # Backpropagation
-    #     self.optimizer.zero_grad()
-    #     loss.backward()
-    #     torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=0.5)
-    #     self.optimizer.step()
-
-    #     # Clear trajectories
-    #     self.states = []
-    #     self.actions = []
-    #     self.log_probs = []
-    #     self.rewards = []
-    #     self.dones = []
-
 
     def train(self, episodes=10):
         """Train the agent."""
