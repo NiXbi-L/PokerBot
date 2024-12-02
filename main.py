@@ -138,7 +138,7 @@ class SelfPlay:
         env_name = 'neuron_poker-v0'
         self.env = gym.make(env_name, initial_stacks=self.stack, render=self.render)
         self.env.add_player(EquityPlayer(name='equity/50/50', min_call_equity=.5, min_bet_equity=-.5))
-        self.env.add_player(EquityPlayer(name='equity/50/80', min_call_equity=.8, min_bet_equity=-.8))
+        self.env.add_player(EquityPlayer(name='equity/80/80', min_call_equity=.8, min_bet_equity=-.8))
         self.env.add_player(EquityPlayer(name='equity/70/70', min_call_equity=.7, min_bet_equity=-.7))
         self.env.add_player(EquityPlayer(name='equity/20/30', min_call_equity=.2, min_bet_equity=-.3))
         self.env.add_player(RandomPlayer())
@@ -280,19 +280,20 @@ class SelfPlay:
         from agents.agent_random import Player as RandomPlayer
         from agents.agent_MCTS import Player as MCTSPlayer
         from agents.agent_MCTS import MCTSNet, optim, train_neural_network, deque
+        from agents.agent_consider_equity import Player as EquityPlayer
         import os
         import time
         import torch
         import gym
 
         env_name = 'neuron_poker-v0'
-        self.env = gym.make(env_name, initial_stacks=5, render=self.render)
+        self.env = gym.make(env_name, initial_stacks=6, render=self.render)
 
-        self.env.add_player(PlayerShell(name='mcts-player', stack_size=5))
-        self.env.add_player(RandomPlayer())
-        self.env.add_player(RandomPlayer())
-        self.env.add_player(RandomPlayer())
-        self.env.add_player(RandomPlayer())
+        self.env.add_player(PlayerShell(name='mcts-player', stack_size=6))
+        self.env.add_player(EquityPlayer(name='equity/50/50', min_call_equity=.5, min_bet_equity=.5))
+        self.env.add_player(EquityPlayer(name='equity/50/80', min_call_equity=.8, min_bet_equity=.8))
+        self.env.add_player(EquityPlayer(name='equity/70/70', min_call_equity=.7, min_bet_equity=.7))
+        self.env.add_player(EquityPlayer(name='equity/20/30', min_call_equity=.2, min_bet_equity=.3))
         self.env.add_player(RandomPlayer())
 
         self.env.reset()

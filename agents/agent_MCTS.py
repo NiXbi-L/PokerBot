@@ -78,7 +78,7 @@ class MCTSNode:
         self.done = False  # Whether the state is terminal
 
 class MonteCarloTreeSearch:
-    def __init__(self, env, neural_net, replay_buffer, max_depth=100, num_simulations=100, exploration_constant=1.0, dirichlet_alpha=0.03, exploration_fraction=0.25):
+    def __init__(self, env, neural_net, replay_buffer, max_depth=1000, num_simulations=10000, exploration_constant=1.0, dirichlet_alpha=0.03, exploration_fraction=0.25):
         self.env = env
         self.neural_net = neural_net
         self.replay_buffer = replay_buffer
