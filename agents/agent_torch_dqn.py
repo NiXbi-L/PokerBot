@@ -26,7 +26,7 @@ class DQNetwork(nn.Module):
     def __init__(self, state_size, action_size):
         super(DQNetwork, self).__init__()
         self.fc1 = nn.Linear(state_size, 64)
-        self.fc2 = nn.Linear(64, 64)
+        self.fc2 = nn.Linear(64, 64)t
         self.fc3 = nn.Linear(64, action_size)
 
     def forward(self, x):
@@ -46,10 +46,8 @@ class Player:
         self.epsilon_min = epsilon_min
         self.epsilon_decay = epsilon_decay
         self.memory = deque(maxlen=memory_limit)
-        # print("Observation space is ",env.observation_space)
         self.state_size = env.observation_space[0]
         self.action_size = env.action_space.n
-        print('action size:', self.action_size)
 
         # Define policy and target networks
         self.policy_net = DQNetwork(self.state_size, self.action_size)
@@ -88,7 +86,6 @@ class Player:
                 # logger.info(f"Action: {action}")
                 # if state == Stage.SHOWDOWN.value or state == Stage.SHOWDOWN:
                 #     quit()
-                print('Action', action)
                 next_state, reward, done, _ = self.env.step(action)
                 self.remember(state, action, reward, next_state, done)
                 state = next_state
