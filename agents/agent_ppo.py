@@ -3,8 +3,10 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 from torch.distributions import Categorical
+from torch.utils.tensorboard import SummaryWriter
 from gym_env.enums import Action, Stage
 import random
+import time
 
 class PPOActorCritic(nn.Module):
     """Combined Actor-Critic Network."""
@@ -185,11 +187,14 @@ class Player:
         self.rewards = []
         self.dones = []
 
-    def train(self, episodes=10):
+    def train(self, episodes=2):
         """Train the agent."""
+        timestr = time.strftime("%Y%m%d-%H%M%S") + "_" + 'PPO'
+        writer = SummaryWriter(log_dir=f'./Graph/{timestr}')
         for episode in range(episodes):
             state = self.env.reset()
             episode_reward = 0
+            steps = 0
             done = False
             while not done:
                 action, log_prob = self.action(self.env.legal_moves, state, None)
@@ -197,7 +202,11 @@ class Player:
 
                 self.store_transition(state, action, log_prob, reward, done)
                 state = next_state
+                steps += 1
                 episode_reward += reward
+            
+            writer.add_scalar('Episode Reward', episode_reward, episode)
+            writer.add_scalar('Steps per Episode', steps, episode)
 
             # Learn from the episode
             _, values = self.model(torch.FloatTensor(self.states))
@@ -205,3 +214,4 @@ class Player:
             self.learn()
 
             print(f"Episode {episode + 1}/{episodes}, Reward: {episode_reward}")
+        writer.close()
