@@ -187,7 +187,7 @@ class Player:
         self.rewards = []
         self.dones = []
 
-    def train(self, episodes=2):
+    def train(self, episodes=5):
         """Train the agent."""
         timestr = time.strftime("%Y%m%d-%H%M%S") + "_" + 'PPO'
         writer = SummaryWriter(log_dir=f'./Graph/{timestr}')

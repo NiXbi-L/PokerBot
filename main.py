@@ -218,7 +218,7 @@ class SelfPlay:
         from agents.agent_ppo import Player as PPOPlayer
         from agents.agent_random import Player as RandomPlayer
         env_name = 'neuron_poker-v0'
-        self.env = gym.make(env_name, initial_stacks=15, funds_plot=self.funds_plot, render=self.render,
+        self.env = gym.make(env_name, initial_stacks=10, funds_plot=self.funds_plot, render=self.render,
                           use_cpp_montecarlo=self.use_cpp_montecarlo)
         np.random.seed(123)
         self.env.seed(123)
@@ -227,7 +227,7 @@ class SelfPlay:
         self.env.add_player(EquityPlayer(name='equity/70/70', min_call_equity=.7, min_bet_equity=.7))
         self.env.add_player(EquityPlayer(name='equity/20/30', min_call_equity=.2, min_bet_equity=.3))
         self.env.add_player(RandomPlayer())
-        self.env.add_player(PlayerShell(name='torch-ppo', stack_size=15))
+        self.env.add_player(PlayerShell(name='torch-ppo', stack_size=10))
         self.env.reset()
         ppo = PPOPlayer(env=self.env, action_size=self.env.action_space.n, state_size=self.env.observation_space[0])
         ppo.train()
