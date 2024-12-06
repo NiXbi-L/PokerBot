@@ -7,6 +7,9 @@ from torch.utils.tensorboard import SummaryWriter
 from gym_env.enums import Action, Stage
 import random
 import time
+import logging
+
+log = logging.getLogger(__name__)
 
 class PPOActorCritic(nn.Module):
     """Combined Actor-Critic Network."""
@@ -138,7 +141,7 @@ class Player:
         returns = [adv + val for adv, val in zip(advantages, values)]
         return returns, advantages
 
-    def learn(self):
+    def learn(self, writer, episode):
         """Perform one training iteration."""
         states = torch.FloatTensor(self.states)
         actions = torch.LongTensor(self.actions)
@@ -175,6 +178,8 @@ class Player:
 
         loss = actor_loss + self.critic_coeff * critic_loss + self.entropy_coeff * entropy_loss
 
+        writer.add_scalar('Loss/Actor Loss', actor_loss, episode)
+        
         # Backpropagation
         self.optimizer.zero_grad()
         loss.backward()
@@ -187,7 +192,7 @@ class Player:
         self.rewards = []
         self.dones = []
 
-    def train(self, episodes=5):
+    def train(self, episodes=20):
         """Train the agent."""
         timestr = time.strftime("%Y%m%d-%H%M%S") + "_" + 'PPO'
         writer = SummaryWriter(log_dir=f'./Graph/{timestr}')
@@ -211,7 +216,9 @@ class Player:
             # Learn from the episode
             _, values = self.model(torch.FloatTensor(self.states))
             values = values.squeeze().detach().numpy()
-            self.learn()
+            print('The code is running till here 1')
+            self.learn(writer, episode)
+            print('The code is running till here 2')
 
             print(f"Episode {episode + 1}/{episodes}, Reward: {episode_reward}")
         writer.close()

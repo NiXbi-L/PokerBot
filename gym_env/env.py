@@ -197,7 +197,6 @@ class HoldemTable(Env):
                         self._calculate_reward(action)
 
         else:  # action received from player shell (e.g. keras rl, not autoplay)
-            print('We are in the else of this function')
             self._get_environment()  # get legal moves
             if Action(action) not in self.legal_moves:
                 self._illegal_move(action)
@@ -535,8 +534,8 @@ class HoldemTable(Env):
         self.min_call = 0
         for player in self.players:
             player.last_action_in_stage = ''
+        
         self.player_cycle.new_street_reset()
-
         # advance headsup players by 1 step after preflop
         if self.stage != Stage.PREFLOP and self.num_of_players == 2:
             self.player_cycle.idx += 1

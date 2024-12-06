@@ -194,21 +194,23 @@ class SelfPlay:
         from agents.agent_torch_dqn import Player as DQNPlayer
         from agents.agent_random import Player as RandomPlayer
         env_name = 'neuron_poker-v0'
-        env = gym.make(env_name, initial_stacks=5, funds_plot=self.funds_plot, render=self.render,
+        self.env = gym.make(env_name, initial_stacks=10, funds_plot=self.funds_plot, render=self.render,
                        use_cpp_montecarlo=self.use_cpp_montecarlo)
 
         np.random.seed(123)
-        env.seed(123)
+        self.env.seed(123)
         # env.add_player(EquityPlayer(name='equity/50/70', min_call_equity=.5, min_bet_equity=.7))
-        env.add_player(EquityPlayer(name='equity/20/30', min_call_equity=.2, min_bet_equity=.3))
-        # env.add_player(RandomPlayer())
-        # env.add_player(RandomPlayer())
-        # env.add_player(RandomPlayer())
+        # env.add_player(EquityPlayer(name='equity/20/30', min_call_equity=.2, min_bet_equity=.3))
+        self.env.add_player(RandomPlayer())
+        self.env.add_player(RandomPlayer())
+        self.env.add_player(RandomPlayer())
+        self.env.add_player(RandomPlayer())
+        self.env.add_player(RandomPlayer())
         # env.add_player(PlayerShell(name='keras-rl', stack_size=self.stack))  # shell is used for callback to keras rl
-        env.add_player(PlayerShell(name='torch-rl', stack_size=5)) 
-        env.reset()
+        self.env.add_player(PlayerShell(name='torch-rl', stack_size=10)) 
+        self.env.reset()
 
-        dqn = DQNPlayer(env=env)
+        dqn = DQNPlayer(env=self.env)
         # dqn.initiate_agent(env)
         dqn.train(env_name='torch-rl')
     
@@ -222,10 +224,14 @@ class SelfPlay:
                           use_cpp_montecarlo=self.use_cpp_montecarlo)
         np.random.seed(123)
         self.env.seed(123)
-        self.env.add_player(EquityPlayer(name='equity/50/50', min_call_equity=.5, min_bet_equity=.5))
-        self.env.add_player(EquityPlayer(name='equity/50/80', min_call_equity=.8, min_bet_equity=.8))
-        self.env.add_player(EquityPlayer(name='equity/70/70', min_call_equity=.7, min_bet_equity=.7))
-        self.env.add_player(EquityPlayer(name='equity/20/30', min_call_equity=.2, min_bet_equity=.3))
+        # self.env.add_player(EquityPlayer(name='equity/50/50', min_call_equity=.5, min_bet_equity=.5))
+        # self.env.add_player(EquityPlayer(name='equity/50/80', min_call_equity=.8, min_bet_equity=.8))
+        # self.env.add_player(EquityPlayer(name='equity/70/70', min_call_equity=.7, min_bet_equity=.7))
+        # self.env.add_player(EquityPlayer(name='equity/20/30', min_call_equity=.2, min_bet_equity=.3))
+        self.env.add_player(RandomPlayer())
+        self.env.add_player(RandomPlayer())
+        self.env.add_player(RandomPlayer())
+        self.env.add_player(RandomPlayer())
         self.env.add_player(RandomPlayer())
         self.env.add_player(PlayerShell(name='torch-ppo', stack_size=10))
         self.env.reset()
