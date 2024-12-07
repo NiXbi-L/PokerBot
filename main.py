@@ -278,111 +278,116 @@ class SelfPlay:
         print("============")
         print(league_table)
         print(f"Best Player: {best_player}")
+    
+    def mcts_agent(self, mode='train', num_episodes=20, num_runs=5):
+        """Run MCTS agent for multiple runs and plot rewards for each run."""
+        import os
+        import time
+        import torch
+        import gym
+        import matplotlib.pyplot as plt
+        import pandas as pd
+        from agents.agent_random import Player as RandomPlayer
+        from agents.agent_MCTS import Player as MCTSPlayer
+        from agents.agent_MCTS import MCTSNet, optim, train_neural_network, deque
+        from agents.agent_consider_equity import Player as EquityPlayer
+        env_name = 'neuron_poker-v0'
+        rewards_per_run = []  # Store rewards for each run
+    
+        for run in range(num_runs):
+            print(f"Starting Run {run + 1}/{num_runs}")
+            self.env = gym.make(env_name, initial_stacks=10, render=self.render)
+    
+            # Add players
+            self.env.add_player(PlayerShell(name='mcts-player', stack_size=10))
+            self.env.add_player(EquityPlayer(name='equity/50/50', min_call_equity=.5, min_bet_equity=.5))
+            self.env.add_player(EquityPlayer(name='equity/80/80', min_call_equity=.8, min_bet_equity=.8))
+            self.env.add_player(EquityPlayer(name='equity/70/70', min_call_equity=.7, min_bet_equity=.7))
+            self.env.add_player(EquityPlayer(name='equity/20/30', min_call_equity=.2, min_bet_equity=.3))
+            self.env.add_player(RandomPlayer())
+            self.env.reset()
+    
+            try:
+                input_size = self.env.observation_space[0]
+                num_actions = self.env.action_space.n
+            except AttributeError as e:
+                print(f"Error accessing observation or action space: {e}")
+                return
+    
+            # Initialize the neural network
+            neural_net = MCTSNet(input_size, num_actions)
+            model_path = os.path.join('agents', 'mcts_net.pth')
+    
+            optimizer = optim.Adam(neural_net.parameters(), lr=0.001)
+            replay_buffer = deque(maxlen=1000000)  # Store all episodes, size can be adjusted
+    
+            mcts_player = MCTSPlayer(self.env, neural_net, replay_buffer)
+    
+            # For tracking metrics (Reward, Steps/Episode)
+            rewards = []
+            steps = []
+    
+            episode = 0
+            while episode < num_episodes:
+                print(f"Run {run + 1}, Episode {episode + 1}/{num_episodes} - Starting...")
+                state = self.env.reset()
+                done = False
+                steps_episode = 0
+                total_reward = 0
+    
+                while not done:
+                    action_space = self.env.legal_moves
+                    action = mcts_player.action(action_space, state, None)
+                    buffer, next_state, reward, done, _ = self.env.mcts_step(action)
+                    for i in range(len(buffer)):
+                        replay_buffer.append(buffer[i])
+                    state = next_state
+                    total_reward = reward
+                    steps_episode += 1
+    
+                # Train the neural network after each episode
+                print("REPLAY BUFFER IS SIZE: ", len(replay_buffer))
+                train_neural_network(neural_net, replay_buffer, optimizer, batch_size=32, gamma=0.995)
+    
+                # Save the model after every episode
+                torch.save(neural_net.state_dict(), model_path)
+    
+                # Append the results for plotting later
+                rewards.append(total_reward)
+                steps.append(steps_episode)
+    
+                # Log the winner of the episode
+                if self.env.winner_ix is not None:
+                    self.winner_in_episodes.append(self.env.winner_ix)
+                else:
+                    print(f"Hand did not have a winner for episode {episode}.")
+                
+                episode += 1
+    
+            # After each run, store rewards for the run
+            rewards_per_run.append(rewards)
+    
+        # After all runs, plot the results
+        self.plot_training_metrics(rewards_per_run)
+    
+    def plot_training_metrics(self, rewards_per_run):
+        """Plot training metrics such as reward and steps for each run."""
         
+        plt.figure(figsize=(10, 5))
+    
+        # Plot rewards per episode for each run
+        for i, rewards in enumerate(rewards_per_run):
+            plt.plot(rewards, label=f"Run {i + 1}")
+    
+        plt.title("Total Reward per Episode (Multiple Runs)")
+        plt.xlabel("Episode")
+        plt.ylabel("Total Reward")
+        plt.legend()
+        plt.grid(True)
         
-    def mcts_agent(self, mode='train', num_episodes=10):
-      """Create an environment with 2 random players and 1 MCTS player integrated with a neural network."""
-      from agents.agent_random import Player as RandomPlayer
-      from agents.agent_MCTS import Player as MCTSPlayer
-      from agents.agent_MCTS import MCTSNet, optim, train_neural_network, deque
-      from agents.agent_consider_equity import Player as EquityPlayer
-      import os
-      import time
-      import torch
-      import gym
-      from torch.utils.tensorboard import SummaryWriter
-      
-      # Create the environment
-      env_name = 'neuron_poker-v0'
-      self.env = gym.make(env_name, initial_stacks=10, render=self.render)
-      
-      self.env.add_player(PlayerShell(name='mcts-player', stack_size=10))
-      self.env.add_player(EquityPlayer(name='equity/50/50', min_call_equity=.5, min_bet_equity=.5))
-      self.env.add_player(EquityPlayer(name='equity/80/80', min_call_equity=.8, min_bet_equity=.8))
-      self.env.add_player(EquityPlayer(name='equity/70/70', min_call_equity=.7, min_bet_equity=.7))
-      self.env.add_player(EquityPlayer(name='equity/20/30', min_call_equity=.2, min_bet_equity=.3))
-      self.env.add_player(RandomPlayer())
-      
-      self.env.reset()
-      
-      try:
-          input_size = self.env.observation_space[0]
-          num_actions = self.env.action_space.n
-      except AttributeError as e:
-          print(f"Error accessing observation or action space: {e}")
-          return
-      
-      # Initialize the neural network
-      neural_net = MCTSNet(input_size, num_actions)
-      
-      # Check if the model weights already exist
-      model_path = os.path.join('agents', 'mcts_net.pth')
-      
-      if os.path.exists(model_path):
-          print(f"Loading model weights from {model_path}...")
-          neural_net.load_state_dict(torch.load(model_path))
-          neural_net.eval()  # Set the model to evaluation mode if you are only using it for inference
-      else:
-          print(f"Model weights not found, initializing a new model.")
-      
-      # Create the optimizer after loading the model
-      optimizer = optim.Adam(neural_net.parameters(), lr=0.001)
-      replay_buffer = deque(maxlen=1000000)  # Store all episodes, size can be adjusted
-      
-      mcts_player = MCTSPlayer(self.env, neural_net, replay_buffer)
-      
-      # Setup TensorBoard logging
-      log_dir = './runs/mcts_poker_run'  # Define the directory for the run
-      writer = SummaryWriter(log_dir=log_dir)  # Creates a new directory for the current run
-      
-      episode = 0
-      while episode < num_episodes:
-          print(f"Episode {episode + 1}/{num_episodes} - Starting...")
-          state = self.env.reset()
-          done = False
-          steps = 0
-          total_reward = 0
-      
-          while not done:
-              action_space = self.env.legal_moves
-              action = mcts_player.action(action_space, state, None)
-              next_state, reward, done, _ = self.env.mcts_step(action)
-              replay_buffer.append((state, action, reward, next_state))
-              state = next_state
-              total_reward += reward
-              steps += 1
-      
-          # Train the neural network after each episode
-          print("replay_buffer_size: ", len(replay_buffer))
-          train_neural_network(neural_net, replay_buffer, optimizer, batch_size=32, gamma=0.995)
-          print(f"Episode {episode + 1}: Neural network trained")
-      
-          # Save the model after every episode
-          torch.save(neural_net.state_dict(), model_path)
-          print(f"Model weights saved to {model_path}")
-      
-          # Log the reward and number of steps to TensorBoard
-          writer.add_scalar('Reward', total_reward, episode)
-          writer.add_scalar('Steps/Episode', steps, episode)
-      
-          # Log the winner of the episode
-          if self.env.winner_ix is not None:
-              self.winner_in_episodes.append(self.env.winner_ix)
-          else:
-              self.log.warning(f"Hand did not have a winner for episode {episode}.")
-      
-          episode += 1
-      
-      # Close TensorBoard writer
-      writer.close()
-      
-      # Print final league table
-      league_table = pd.Series(self.winner_in_episodes).value_counts()
-      best_player = league_table.index[0]
-      print("League Table")
-      print("============")
-      print(league_table)
-      print(f"Best Player: {best_player}")
+        # Display the plot
+        plt.tight_layout()
+        plt.show()
 
 if __name__ == '__main__':
     command_line_parser()

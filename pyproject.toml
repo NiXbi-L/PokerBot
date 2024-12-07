@@ -20,6 +20,8 @@ matplotlib = "^3.8.2"
 mpld3 = "^0.5.10"
 tensorflow-cpu = "2.16.2"
 tensorboard = "2.16.2"
+tensorflow = "2.16.2"
+torch = "2.0.1"
 
 
 [build-system]

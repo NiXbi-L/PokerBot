@@ -11,9 +11,9 @@ import torch.nn.functional as F
 class MCTSNet(nn.Module):
     def __init__(self, input_size, num_actions):
         super(MCTSNet, self).__init__()
-        self.fc1 = nn.Linear(input_size, 512)
-        self.fc2 = nn.Linear(512, 256)
-        self.fc3 = nn.Linear(256, 128)
+        self.fc1 = nn.Linear(input_size, 128)
+        self.fc2 = nn.Linear(128, 64)
+        self.fc3 = nn.Linear(64, 128)
         
         # Recurrent layer for capturing sequential dependencies
         self.lstm = nn.LSTM(128, 128, batch_first=True, dropout=0.3)
@@ -78,7 +78,7 @@ class MCTSNode:
         self.done = False  # Whether the state is terminal
 
 class MonteCarloTreeSearch:
-    def __init__(self, env, neural_net, replay_buffer, max_depth=1000, num_simulations=10000, exploration_constant=1.0, dirichlet_alpha=0.03, exploration_fraction=0.25):
+    def __init__(self, env, neural_net, replay_buffer, max_depth=2000, num_simulations=10000, exploration_constant=1.0, dirichlet_alpha=0.03, exploration_fraction=0.25):
         self.env = env
         self.neural_net = neural_net
         self.replay_buffer = replay_buffer
@@ -97,6 +97,9 @@ class MonteCarloTreeSearch:
         self.add_exploration_noise(root)
         for _ in range(self.num_simulations):
             self.simulate(root, action_space)
+        action = self.best_action(root)
+        buffer, next_state, reward, done, _ = self.env.mcts_step(action)
+        print("ADDING TO REPLAY BUFFER")
         return self.best_action(root)
 
     def add_exploration_noise(self, root):
@@ -138,19 +141,20 @@ class MonteCarloTreeSearch:
             action_probabilities = np.ones(len(action_space_list))/len(action_space_list)
             
         action = np.random.choice(action_space_list, p=action_probabilities)
-        next_state, reward, done, _ = self.env.mcts_step(action)
-        self.replay_buffer.append((node.state, action, reward, next_state))
-
-        # Add experience to replay buffer
-        self.replay_buffer.append((node.state, action, reward, next_state))
+        print("*"*100)
+        print("*"*100)
+        print("HOLD UP WE EXPANDING")
+        print("*"*100)
+        print("*"*100)
+        buffer, next_state, reward, done, _ = self.env.mcts_step(action)
 
         child = MCTSNode(next_state, parent=node, action=action)
         child.reward = reward
         child.done = done
         node.children.append(child)
 
-        self.N[(tuple(next_state), action)] = 0
-        self.Q[(tuple(next_state), action)] = 0.0
+        self.N[tuple(next_state)] = 0
+        self.Q[tuple(next_state)] = 0.0
 
         if done:
             return reward  # Return immediate reward for terminal states
@@ -167,7 +171,7 @@ class MonteCarloTreeSearch:
             if not action_space:
                 break
             action = random.choice(list(action_space))
-            state, reward, done, _ = self.env.mcts_step(action)
+            buffer, state, reward, done, _ = self.env.mcts_step(action)
             total_reward += reward * discount
         return total_reward
 
@@ -218,67 +222,62 @@ class MonteCarloTreeSearch:
         with torch.no_grad():
             _, value = self.neural_net(state_tensor)
         return value.item()
-
+        
 def train_neural_network(network, replay_buffer, optimizer, batch_size=32, gamma=0.995):
     if len(replay_buffer) < batch_size:
         print("Not enough data to train on")
         return
-
+    
     # Sample a batch from the replay buffer
     weights = [1 + i for i in range(len(replay_buffer))]  # Give more weight to recent experiences
     weights = torch.tensor(weights, dtype=torch.float32)
-    weights /= weights.sum()
+    weights /= weights.sum()  # Normalize to get probabilities
     indices = torch.multinomial(weights, batch_size, replacement=True)
+    
+    # Unpack the buffer and filter out None values in actions
     batch = [replay_buffer[i] for i in indices]
-    states, actions, rewards, next_states = zip(*batch)
-
-    # Convert to tensors
+    filtered_batch = [(state, action, reward, done, info) for state, action, reward, done, info in batch if action is not None]
+    
+    # If after filtering, we have no valid data, return early
+    if len(filtered_batch) == 0:
+        print("No valid actions in the batch after filtering None values")
+        return
+    
+    # Unpack the filtered batch into separate variables
+    states, actions, rewards, dones, infos = zip(*filtered_batch)  # Unpack the filtered batch
+    
+    # Convert actions to their integer values
+    action_values = [action.value for action in actions]  # Convert Action enum to its integer value
+    actions_tensor = torch.tensor(action_values, dtype=torch.long)  # Create a tensor for actions
+    
+    # Convert other elements to tensors
     states = torch.tensor(states, dtype=torch.float32)
-    actions = [action.value for action in actions]
-    actions = torch.tensor(actions, dtype=torch.long)
     rewards = torch.tensor(rewards, dtype=torch.float32)
-    next_states = torch.tensor(next_states, dtype=torch.float32)
-
+    dones = torch.tensor(dones, dtype=torch.float32)  # done flag as tensor (1.0 or 0.0)
+    
     # Forward pass
     policies, values = network(states)
-    _, next_values = network(next_states)
-
+    
     # Compute target values
-    targets = rewards + gamma * next_values.squeeze()
-    policy_loss = -torch.mean(torch.log(policies.gather(1, actions.unsqueeze(1))) * (targets - values.squeeze()))
+    # If done, use reward as target, otherwise use the value of the current state
+    targets = rewards + gamma * (1 - dones) * values.squeeze()  # If done, don't propagate future rewards
+    
+    # Compute the policy loss (actor loss)
+    policy_loss = -torch.mean(torch.log(policies.gather(1, actions_tensor.unsqueeze(1))) * (targets - values.squeeze()))
+    
+    # Compute the value loss (critic loss)
     value_loss = nn.MSELoss()(values.squeeze(), targets)
-
+    
+    # Combine losses
     loss = policy_loss + value_loss
-    weighted_loss = (loss * weights[indices].unsqueeze(1)).mean()  # Apply the weight to each loss term
-
-    # Backprop
+    
+    weighted_loss = (loss * weights[indices].unsqueeze(1)).mean()  # Weighted loss
+    
+    # Backpropagation
     optimizer.zero_grad()
     weighted_loss.backward()
     optimizer.step()
 
-# def train_mcts_and_network(env, neural_net, num_episodes=1000, batch_size=32, gamma=0.995, train_interval=10):
-#     replay_buffer = deque(maxlen=10000)  # Size of the replay buffer
-#     mcts = MonteCarloTreeSearch(env, neural_net, replay_buffer)
-#     optimizer = optim.Adam(neural_net.parameters(), lr=0.001)
-
-#     for episode in range(num_episodes):
-#         state = env.reset()
-#         done = False
-#         while not done:
-#             action_space = env.legal_moves
-#             action = mcts.search(state, action_space)
-#             next_state, reward, done, _ = env.mcts_step(action)
-
-#             # Collect experience for training
-#             replay_buffer.append((state, action, reward, next_state))
-#             state = next_state
-
-#         # Periodically train the neural network
-#         if episode % train_interval == 0:
-#             train_neural_network(neural_net, replay_buffer, optimizer, batch_size=batch_size, gamma=gamma)
-#             print(f"Episode {episode}: Network trained")
-
-#     print("Training complete.")
 
 class Player:
     def __init__(self, env, neural_net, replay_buffer, name='MCTS'):
@@ -292,6 +291,8 @@ class Player:
         self.mcts = MonteCarloTreeSearch(env, neural_net, replay_buffer)
 
     def action(self, action_space, observation, info):
+        # print("MCTS IS GOING")
+        # print("-"*200)
         this_player_action_space = {Action.FOLD, Action.CHECK, Action.CALL, Action.RAISE_POT,
                                     Action.RAISE_HALF_POT, Action.RAISE_2POT}
         possible_moves = this_player_action_space.intersection(set(action_space))

@@ -12,6 +12,7 @@ from gym_env.enums import Action, Stage
 from gym_env.rendering import PygletWindow, WHITE, RED, GREEN, BLUE
 from tools.hand_evaluator import get_winner
 from tools.helper import flatten
+from collections import defaultdict, deque
 
 # pylint: disable=import-outside-toplevel
 
@@ -128,6 +129,8 @@ class HoldemTable(Env):
 
         self.observation = None
         self.reward = None
+        self.total_reward = 0
+        self.buffer = deque(maxlen=1000000)
         self.info = None
         self.done = False
         self.funds_history = None
@@ -206,6 +209,7 @@ class HoldemTable(Env):
                 if self.first_action_for_hand[self.acting_agent] or self.done:
                     self.first_action_for_hand[self.acting_agent] = False
                     self._calculate_reward(action)
+                    print(f"Previous action reward for seat {self.acting_agent}: {self.reward}")
 
             log.debug(f"Previous action reward for seat {self.acting_agent}: {self.reward}")
         return self.array_everything, self.reward, self.done, self.info
@@ -246,7 +250,8 @@ class HoldemTable(Env):
         log.debug(f"Previous action reward for seat {self.acting_agent}: {self.reward}")
 
         # Return the updated state, reward, done status, and any additional info.
-        return self.array_everything, self.reward, self.done, self.info
+        print(f"RETURNING REWARD: {self.total_reward}")
+        return self.buffer, self.array_everything, self.total_reward, self.done, self.info
 
     def _execute_step(self, action):
         self._process_decision(action)
@@ -356,7 +361,15 @@ class HoldemTable(Env):
 
         else:
             pass
+        if self.acting_agent == 0:
+            self.total_reward += self.reward
+            print("$"*100)
+            print(f"RUNNING REWARD IS {self.total_reward}")
+            print("$"*100)
+            print(f"LAST MCTS ACTION WAS {last_action}")
+            self.buffer.append([self.array_everything, last_action, self.total_reward, self.done, self.info])
 
+            
     def _process_decision(self, action):  # pylint: disable=too-many-statements
         """Process the decisions that have been made by an agent."""
         if action not in [Action.SMALL_BLIND, Action.BIG_BLIND]:
