@@ -1,1 +1,1 @@
-{"state_size": 175, "action_size": 8, "layers": [64, 64]}
+{"state_size": 328, "action_size": 8, "layers": [64, 64]}

@@ -26,7 +26,7 @@ class DQNetwork(nn.Module):
     def __init__(self, state_size, action_size):
         super(DQNetwork, self).__init__()
         self.fc1 = nn.Linear(state_size, 64)
-        self.fc2 = nn.Linear(64, 64)t
+        self.fc2 = nn.Linear(64, 64)
         self.fc3 = nn.Linear(64, action_size)
 
     def forward(self, x):
@@ -69,12 +69,13 @@ class Player:
         writer = SummaryWriter(log_dir=f'{log_dir}/{timestr}')
 
         total_steps = 0
-        for episode in range(self.action_size):
+        for episode in range(20):
             print(f"Episode {episode}")
             state = self.env.reset()
             done = False
             episode_reward = 0
             steps = 0
+            episode_loss = []
 
             while not done:
                 # if steps < nb_max_start_steps and start_step_policy:
@@ -90,7 +91,11 @@ class Player:
                 self.remember(state, action, reward, next_state, done)
                 state = next_state
 
-                self.replay()  # Train the model with experience replay
+                loss = self.replay()  # Train the model with experience replay
+                
+                # update the running average of the loss
+                if loss:
+                    episode_loss.append(loss)
 
                 episode_reward += reward
                 steps += 1
@@ -99,6 +104,9 @@ class Player:
             # Log the reward for this episode
             writer.add_scalar('Episode Reward', episode_reward, episode)
             writer.add_scalar('Steps per Episode', steps, episode)
+            if episode_loss:
+                episode_loss = np.array(episode_loss)
+                writer.add_scalar('Loss/Actor Loss', np.mean(episode_loss), episode)
 
             # Update target network periodically
             if episode % 10 == 0:
@@ -239,6 +247,8 @@ class Player:
         # Decay epsilon
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
+        
+        return loss.item()
 
     def update_target_network(self):
         """Copy weights from policy network to target network"""
