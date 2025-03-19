@@ -16,8 +16,8 @@ train_interval = 100  # train every 100 steps
 nb_steps_warmup = 50  # before training starts, should be higher than start steps
 nb_steps = 100000
 memory_limit = int(nb_steps / 2)
-batch_size = 500  # items sampled from memory to train
-enable_double_dqn = False
+batch_size = 512  # items sampled from memory to train
+enable_double_dqn = True
 
 logger = logging.getLogger(__name__)
 
@@ -37,17 +37,19 @@ class DQNetwork(nn.Module):
 
 # Define the DQN Agent in PyTorch
 class Player:
-    def __init__(self, name='DQN', load_model=None, env=None, batch_size=64, gamma=0.99, lr=0.001, epsilon=1.0, epsilon_min=0.01, epsilon_decay=0.995, memory_limit=2000):
+    def __init__(self, name='DQN', load_model=None, env=None, batch_size=512, gamma=0.98, lr=0.001, epsilon=0.8, epsilon_min=0.01, epsilon_decay=0.996, memory_limit=10000,penalty_coeff=0):
         self.name = name
         self.env = env
         self.batch_size = batch_size
         self.gamma = gamma  # discount factor
         self.epsilon = epsilon  # exploration rate
         self.epsilon_min = epsilon_min
+        self.penalty_coeff = penalty_coeff
         self.epsilon_decay = epsilon_decay
         self.memory = deque(maxlen=memory_limit)
         self.state_size = env.observation_space[0]
         self.action_size = env.action_space.n
+        self.last_action = None
 
         # Define policy and target networks
         self.policy_net = DQNetwork(self.state_size, self.action_size)
@@ -57,11 +59,11 @@ class Player:
 
         # Load model if specified
         if load_model:
-            self.load(load_model)
+            self.load(f'models/dqn_{load_model}_weights.pth')
 
         # Optimizer
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=lr)
-    def train(self, env_name, nb_max_start_steps=1, start_step_policy=None, log_dir='./Graph'):
+    def train(self, env_name, model_name=None, nb_max_start_steps=1, start_step_policy=None, log_dir='./Graph'):
         """Train a model"""
         # Initialize TensorBoard
         logger.info("Training DQN")
@@ -69,9 +71,10 @@ class Player:
         writer = SummaryWriter(log_dir=f'{log_dir}/{timestr}')
 
         total_steps = 0
-        for episode in range(20):
+        for episode in range(1000):
             print(f"Episode {episode}")
             state = self.env.reset()
+            self.last_action = None
             done = False
             episode_reward = 0
             steps = 0
@@ -88,7 +91,12 @@ class Player:
                 # if state == Stage.SHOWDOWN.value or state == Stage.SHOWDOWN:
                 #     quit()
                 next_state, reward, done, _ = self.env.step(action)
+
+                if self.last_action is not None and action == self.last_action:
+                    reward -= self.penalty_coeff
+
                 self.remember(state, action, reward, next_state, done)
+                self.last_action = action
                 state = next_state
 
                 loss = self.replay()  # Train the model with experience replay
@@ -122,15 +130,16 @@ class Player:
             "action_size": self.action_size,
             "layers": [64, 64]  # Match the architecture details
         }
-        with open(f"dqn_{env_name}_json.json", "w") as json_file:
+        with open(f"models/dqn_{env_name}_json.json", "w") as json_file:
             json.dump(dqn_json, json_file)
         
-        self.save(f'dqn_{env_name}_weights.pth')
+        self.save(f'models/dqn_{env_name}_weights.pth')
 
         # Test the model
         self.test(nb_episodes=5)
 
         writer.close()
+
     def start_step_policy(self, observation):
         """Custom policy for random decisions for warm up."""
         logger.info("Random action")
@@ -262,3 +271,10 @@ class Player:
     def save(self, filepath):
         """Save the model weights"""
         torch.save(self.policy_net.state_dict(), filepath)
+
+    def play(self, nb_episodes=5, render=False):
+        """Играть с обученной моделью (без обучения)"""
+        original_epsilon = self.epsilon
+        self.epsilon = 0  # Отключаем exploration
+        self.test(nb_episodes=nb_episodes)
+        self.epsilon = original_epsilon

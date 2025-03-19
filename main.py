@@ -199,20 +199,20 @@ class SelfPlay:
 
         np.random.seed(123)
         self.env.seed(123)
-        # env.add_player(EquityPlayer(name='equity/50/70', min_call_equity=.5, min_bet_equity=.7))
-        # env.add_player(EquityPlayer(name='equity/20/30', min_call_equity=.2, min_bet_equity=.3))
+        #self.env.add_player(EquityPlayer(name='equity/50/70', min_call_equity=.5, min_bet_equity=.7))
+        #self.env.add_player(EquityPlayer(name='equity/20/30', min_call_equity=.2, min_bet_equity=.3))
         self.env.add_player(RandomPlayer())
         self.env.add_player(RandomPlayer())
         self.env.add_player(RandomPlayer())
         self.env.add_player(RandomPlayer())
         self.env.add_player(RandomPlayer())
         # env.add_player(PlayerShell(name='keras-rl', stack_size=self.stack))  # shell is used for callback to keras rl
-        self.env.add_player(PlayerShell(name='torch-rl', stack_size=10)) 
+        self.env.add_player(PlayerShell(name=model_name, stack_size=10))
         self.env.reset()
 
         dqn = DQNPlayer(env=self.env)
         # dqn.initiate_agent(env)
-        dqn.train(env_name='torch-rl')
+        dqn.train(env_name=model_name)
     
     def ppo_train_torch_rl(self):
         '''Implementation of torch-rl proximal policy optimization'''
@@ -241,7 +241,7 @@ class SelfPlay:
     def dqn_play_keras_rl(self, model_name):
         """Create 6 players, one of them a trained DQN"""
         from agents.agent_consider_equity import Player as EquityPlayer
-        from agents.agent_keras_rl_dqn import Player as DQNPlayer
+        from agents.agent_torch_dqn import Player as DQNPlayer
         from agents.agent_random import Player as RandomPlayer
         env_name = 'neuron_poker-v0'
         self.env = gym.make(env_name, initial_stacks=self.stack, render=self.render)

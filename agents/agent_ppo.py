@@ -11,8 +11,10 @@ import logging
 
 log = logging.getLogger(__name__)
 
+
 class PPOActorCritic(nn.Module):
     """Combined Actor-Critic Network."""
+
     def __init__(self, state_size, action_size):
         super(PPOActorCritic, self).__init__()
         # Shared layers
@@ -24,7 +26,7 @@ class PPOActorCritic(nn.Module):
 
         # Critic network
         self.critic_fc = nn.Linear(64, 1)
-        
+
         for layer in self.modules():
             if isinstance(layer, nn.Linear):
                 nn.init.xavier_uniform_(layer.weight)
@@ -39,7 +41,8 @@ class PPOActorCritic(nn.Module):
 
 
 class Player:
-    def __init__(self, env, state_size, action_size, lr=1e-3, gamma=0.99, clip_epsilon=0.2, entropy_coeff=0.001, critic_coeff=0.5):
+    def __init__(self, env, state_size, action_size, lr=1e-3, gamma=0.99, clip_epsilon=0.2, entropy_coeff=0.001,
+                 critic_coeff=0.5, penalty_coeff=0.1):
         self.env = env
         self.state_size = state_size
         self.action_size = action_size
@@ -47,6 +50,7 @@ class Player:
         self.clip_epsilon = clip_epsilon
         self.entropy_coeff = entropy_coeff
         self.critic_coeff = critic_coeff
+        self.penalty_coeff = penalty_coeff  # Штраф за повторение действий
 
         # Initialize actor-critic network
         self.model = PPOActorCritic(state_size, action_size)
@@ -58,6 +62,7 @@ class Player:
         self.log_probs = []
         self.rewards = []
         self.dones = []
+        self.last_action = None  # Для отслеживания предыдущего действия
 
     def action(self, action_space, observation, info):
         """
@@ -68,7 +73,7 @@ class Player:
 
         # Define all possible player actions
         this_player_action_space = {
-            Action.FOLD, Action.CHECK, Action.CALL, 
+            Action.FOLD, Action.CHECK, Action.CALL,
             Action.RAISE_POT, Action.RAISE_HALF_POT, Action.RAISE_2POT
         }
 
@@ -80,7 +85,7 @@ class Player:
             allowed_actions.remove(Stage.SHOWDOWN)
         if Stage.SHOWDOWN.value in allowed_actions:
             allowed_actions.remove(Stage.SHOWDOWN.value)
-        
+
         if not allowed_actions:
             # Handle the edge case when no valid actions are available
             return random.choice(range(self.action_size)), torch.tensor(0.0)
@@ -98,10 +103,10 @@ class Player:
         mask = torch.full((self.action_size,), -np.inf)  # Start with -inf for all actions
         for action in allowed_actions:
             mask[action.value] = 0  # Allow valid actions
-        
+
         # Apply the mask to the logits
         masked_logits = action_logits.squeeze() + mask
-        
+
         # Check for NaNs in masked_logits
         if torch.isnan(action_logits).any():
             raise Exception("NaN detected in action_logits")
@@ -179,7 +184,7 @@ class Player:
         loss = actor_loss + self.critic_coeff * critic_loss + self.entropy_coeff * entropy_loss
 
         writer.add_scalar('Loss/Actor Loss', actor_loss, episode)
-        
+
         # Backpropagation
         self.optimizer.zero_grad()
         loss.backward()
@@ -198,6 +203,7 @@ class Player:
         writer = SummaryWriter(log_dir=f'./Graph/{timestr}')
         for episode in range(episodes):
             state = self.env.reset()
+            self.last_action = None  # Сброс предыдущего действия
             episode_reward = 0
             steps = 0
             done = False
@@ -205,11 +211,16 @@ class Player:
                 action, log_prob = self.action(self.env.legal_moves, state, None)
                 next_state, reward, done, _ = self.env.step(action)
 
+                # Применяем штраф за повторение действия
+                if self.last_action is not None and action == self.last_action:
+                    reward -= self.penalty_coeff
+
                 self.store_transition(state, action, log_prob, reward, done)
+                self.last_action = action  # Обновляем предыдущее действие
                 state = next_state
                 steps += 1
                 episode_reward += reward
-            
+
             writer.add_scalar('Episode Reward', episode_reward, episode)
             writer.add_scalar('Steps per Episode', steps, episode)
 
@@ -221,4 +232,5 @@ class Player:
             print('The code is running till here 2')
 
             print(f"Episode {episode + 1}/{episodes}, Reward: {episode_reward}")
+        torch.save(self.model.state_dict(), f'models/ppo_{timestr}.pth')
         writer.close()

@@ -1,5 +1,5 @@
 <%
-cfg['compiler_args'] = ['/std:c++17']
+cfg['compiler_args'] = ['-std=c++17']
 setup_pybind11(cfg)
 cfg['sources'] = ['Montecarlo.cpp']
 %>
@@ -8,7 +8,7 @@ cfg['sources'] = ['Montecarlo.cpp']
 #include <pybind11/pybind11.h>
 
 #include <pybind11/stl.h>
-#include <pybind11/complex.h>,
+#include <pybind11/complex.h>
 #include <pybind11/functional.h>
 #include <pybind11/chrono.h>
 
