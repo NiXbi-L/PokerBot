@@ -336,39 +336,142 @@ class HoldemTable(Env):
         if self.render_switch:
             self.render()
 
-    def _calculate_reward(self, last_action):
-        """
-        Preliminiary implementation of reward function
+    # def _calculate_reward(self, last_action):
+    #     _ = last_action
+    #     if self.done:
+    #         won = 1 if not self._agent_is_autoplay(idx=self.winner_ix) else -1
+    #         self.reward = self.initial_stacks * len(self.players) * won
+    #         log.debug(f"Keras-rl agent has reward {self.reward}")
+    #
+    #     elif len(self.funds_history) > 1:
+    #         self.reward = self.funds_history.iloc[-1, self.acting_agent] - self.funds_history.iloc[
+    #             -2, self.acting_agent]
+    #
+    #     else:
+    #         pass
+    #     if self.acting_agent == 0:
+    #         self.total_reward += self.reward
+    #         print("$" * 100)
+    #         print(f"RUNNING REWARD IS {self.total_reward}")
+    #         print("$" * 100)
+    #         print(f"LAST MCTS ACTION WAS {last_action}")
+    #         self.buffer.append([self.array_everything, last_action, self.total_reward, self.done, self.info])
 
-        - Currently missing potential additional winnings from future contributions
-        """
-        # if last_action == Action.FOLD:
-        #     self.reward = -(
-        #             self.community_pot + self.current_round_pot)
-        # else:
-        #     self.reward = self.player_data.equity_to_river_alive * (self.community_pot + self.current_round_pot) - \
-        #                   (1 - self.player_data.equity_to_river_alive) * self.player_pots[self.current_player.seat]
-        _ = last_action
+
+    def _calculate_reward(self, last_action):
+        equity_threshold = 0.65
+        base_multiplier = 1.5
+        stack_penalty_multiplier = 3
+
+        current_stack = self.funds_history.iloc[-1, self.acting_agent] if len(
+            self.funds_history) > 0 else self.initial_stacks
+        stack_ratio = current_stack / self.initial_stacks
+
         if self.done:
             won = 1 if not self._agent_is_autoplay(idx=self.winner_ix) else -1
             self.reward = self.initial_stacks * len(self.players) * won
-            log.debug(f"Keras-rl agent has reward {self.reward}")
+
+            if current_stack <= 0:
+                self.reward -= self.initial_stacks * stack_penalty_multiplier
+            elif stack_ratio < 0.5:
+                self.reward -= self.initial_stacks * (0.5 - stack_ratio) * 0.5
+
+            if self.player_data.equity_to_river_alive > 0.55 \
+                    and last_action == Action.RAISE_3BB \
+                or last_action == Action.RAISE_POT \
+                or last_action == Action.RAISE_HALF_POT \
+                or last_action == Action.RAISE_2POT \
+                or last_action == Action.ALL_IN:
+                self.reward *= 1.2
 
         elif len(self.funds_history) > 1:
-            self.reward = self.funds_history.iloc[-1, self.acting_agent] - self.funds_history.iloc[
-                -2, self.acting_agent]
+            delta = current_stack - self.funds_history.iloc[-2, self.acting_agent]
+            current_equity = self.player_data.equity_to_river_alive
 
+            if stack_ratio < 0.3:
+                delta -= abs(delta) * (0.3 - stack_ratio) * stack_penalty_multiplier
+
+            if last_action == Action.FOLD and current_equity > equity_threshold:
+                self.reward = -abs(delta) * 2
+            elif self.player_data.equity_to_river_alive > 0.55 \
+                    and last_action == Action.RAISE_3BB \
+                or last_action == Action.RAISE_POT \
+                or last_action == Action.RAISE_HALF_POT \
+                or last_action == Action.RAISE_2POT \
+                or last_action == Action.ALL_IN:
+                self.reward = delta * base_multiplier + (current_equity * 0.5)
+            else:
+                self.reward = delta
+
+            if (current_stack - delta) / self.initial_stacks < 0.2:
+                self.reward -= self.initial_stacks * 0.1
         else:
             pass
+
         if self.acting_agent == 0:
             self.total_reward += self.reward
-            print("$"*100)
+            print("$" * 100)
             print(f"RUNNING REWARD IS {self.total_reward}")
-            print("$"*100)
+            print("$" * 100)
             print(f"LAST MCTS ACTION WAS {last_action}")
             self.buffer.append([self.array_everything, last_action, self.total_reward, self.done, self.info])
 
-            
+
+    # def _calculate_reward(self, last_action):
+    #     equity_threshold = 0.6
+    #     preservation_bonus = 0.3
+    #     stack_penalty_multiplier = 5.0
+    #
+    #     current_stack = self.funds_history.iloc[-1, self.acting_agent] if len(
+    #         self.funds_history) > 0 else self.initial_stacks
+    #     stack_ratio = current_stack / self.initial_stacks
+    #
+    #     if self.done:
+    #         won = 1 if not self._agent_is_autoplay(idx=self.winner_ix) else -1
+    #         self.reward = self.initial_stacks * len(self.players) * won
+    #
+    #         if current_stack <= 0:
+    #             self.reward -= self.initial_stacks * stack_penalty_multiplier
+    #         else:
+    #             self.reward -= (1 - stack_ratio) * self.initial_stacks * 0.7
+    #
+    #         if self.player_pots[self.current_player.seat] < (self.initial_stacks * 0.2):
+    #             self.reward *= 1.1
+    #
+    #     elif len(self.funds_history) > 1:
+    #         delta = current_stack - self.funds_history.iloc[-2, self.acting_agent]
+    #         current_equity = self.player_data.equity_to_river_alive
+    #
+    #         risk_penalty = abs(delta) * (1 - current_equity)
+    #
+    #         if stack_ratio < 0.7:
+    #             risk_penalty += (0.7 - stack_ratio) * self.initial_stacks * 0.2
+    #
+    #         if last_action == Action.FOLD:
+    #             self.reward = delta if current_equity < equity_threshold else -risk_penalty * 2
+    #         elif last_action == Action.RAISE_3BB \
+    #             or last_action == Action.RAISE_POT \
+    #             or last_action == Action.RAISE_HALF_POT \
+    #             or last_action == Action.RAISE_2POT \
+    #             or last_action == Action.ALL_IN:
+    #             self.reward = delta - risk_penalty * (1 - current_equity)
+    #         else:
+    #             self.reward = delta + (preservation_bonus * (1 - abs(delta) / self.initial_stacks))
+    #
+    #         if stack_ratio < 0.4:
+    #             self.reward -= self.initial_stacks * (0.4 - stack_ratio) * stack_penalty_multiplier
+    #     else:
+    #         pass
+    #
+    #     if self.acting_agent == 0:
+    #         self.total_reward += self.reward
+    #         print("$" * 100)
+    #         print(f"RUNNING REWARD IS {self.total_reward}")
+    #         print("$" * 100)
+    #         print(f"LAST MCTS ACTION WAS {last_action}")
+    #         self.buffer.append([self.array_everything, last_action, self.total_reward, self.done, self.info])
+
+
     def _process_decision(self, action):  # pylint: disable=too-many-statements
         """Process the decisions that have been made by an agent."""
         if action not in [Action.SMALL_BLIND, Action.BIG_BLIND]:
@@ -765,9 +868,14 @@ class HoldemTable(Env):
             self.viewer.text(f"{self.players[i].name}", x - 60, y - 15,
                              font_size=10,
                              color=WHITE)
-            self.viewer.text(f"Player {self.players[i].seat}: {self.players[i].cards}", x - 60, y,
-                             font_size=10,
-                             color=WHITE)
+            if self.players[i].name == 'Human':
+                self.viewer.text(f"Player {self.players[i].seat}: {self.players[i].cards}", x - 60, y,
+                                 font_size=10,
+                                 color=WHITE)
+            else:
+                self.viewer.text(f"Player {self.players[i].seat}: [xx, xx]", x - 60, y,
+                                 font_size=10,
+                                 color=WHITE)
             equity_alive = int(round(float(self.players[i].equity_alive) * 100))
 
             self.viewer.text(f"${self.players[i].stack} (EQ: {equity_alive}%)", x - 60, y + 15, font_size=10,

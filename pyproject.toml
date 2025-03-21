@@ -19,7 +19,6 @@ pydocstyle = "^6.3.0"
 matplotlib = "^3.8.2"
 mpld3 = "^0.5.10"
 tensorboard = "2.16.2"
-tensorflow = "2.16.2"
 torch = { version = "2.3.0", extras = ["cu128"] }
 
 

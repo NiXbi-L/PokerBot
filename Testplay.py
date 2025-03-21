@@ -1,15 +1,19 @@
 import torch
 import numpy as np
-import json
+from enum import Enum
+from torch import nn, optim
+from collections import deque
+from gym import Env
+from gym.spaces import Discrete, Box
 from gym_env.enums import Action, Stage
 
 
-class DQNetwork(torch.nn.Module):
+class DQNetwork(nn.Module):
     def __init__(self, state_size, action_size):
-        super().__init__()
-        self.fc1 = torch.nn.Linear(state_size, 64)
-        self.fc2 = torch.nn.Linear(64, 64)
-        self.fc3 = torch.nn.Linear(64, action_size)
+        super(DQNetwork, self).__init__()
+        self.fc1 = nn.Linear(state_size, 64)
+        self.fc2 = nn.Linear(64, 64)
+        self.fc3 = nn.Linear(64, action_size)
 
     def forward(self, x):
         x = torch.relu(self.fc1(x))
@@ -17,98 +21,178 @@ class DQNetwork(torch.nn.Module):
         return self.fc3(x)
 
 
-class PokerAgent:
-    def __init__(self, model_weights_path, model_json_path):
-        with open(model_json_path) as f:
-            model_config = json.load(f)
+class DQNAgent:
+    def __init__(self, state_size, action_size=8, load_model=None):
+        self.state_size = state_size
+        self.action_size = action_size
 
-        self.state_size = model_config["state_size"]  # 328
-        self.action_size = model_config["action_size"]  # 8
+        # Define policy and target networks
+        self.policy_net = DQNetwork(self.state_size, self.action_size)
+        self.target_net = DQNetwork(self.state_size, self.action_size)
+        self.target_net.load_state_dict(self.policy_net.state_dict())
+        self.target_net.eval()  # Set target network to inference mode
 
-        self.model = DQNetwork(self.state_size, self.action_size)
-        self.model.load_state_dict(torch.load(model_weights_path))
-        self.model.eval()
+        if load_model:
+            self.load(load_model)
 
-        self.action_mapping = {
-            0: Action.FOLD,
-            1: Action.CHECK,
-            2: Action.CALL,
-            3: Action.RAISE_3BB,
-            4: Action.RAISE_HALF_POT,
-            5: Action.RAISE_POT,
-            6: Action.RAISE_2POT,
-            7: Action.ALL_IN
-        }
+    def load(self, path):
+        self.policy_net.load_state_dict(torch.load(path))
+        self.target_net.load_state_dict(self.policy_net.state_dict())
 
-    def _vectorize_data(self, opencv_data):
-        # Нормализация
-        bb_norm = 2 * 100  # big_blind=2 из JSON
-
-        # Player Data
-        player_data = [
-            opencv_data['player_position'],
-            opencv_data['player_stack'] / bb_norm,
-            0.0  # equity (если не используется)
-        ]
-
-        # Community Data
-        stage_encoding = np.zeros(4)
-        stage = opencv_data['stage']
-        if stage == Stage.PREFLOP:
-            stage_encoding[0] = 1
-        elif stage == Stage.FLOP:
-            stage_encoding[1] = 1
-        elif stage == Stage.TURN:
-            stage_encoding[2] = 1
-        elif stage == Stage.RIVER:
-            stage_encoding[3] = 1
-
-        community_data = [
-            *stage_encoding.tolist(),
-            opencv_data['community_pot'] / bb_norm,
-            opencv_data['current_round_pot'] / bb_norm,
-            1 / bb_norm,  # small_blind=1
-            2 / bb_norm,  # big_blind=2
-            *[1 if action in opencv_data['legal_moves'] else 0 for action in self.action_mapping.values()]
-        ]
-
-        # Stage Data (заглушка для 328 элементов)
-        stage_data = [0.0] * (328 - len(player_data) - len(community_data))
-
-        return np.concatenate([player_data, community_data, stage_data])
-
-    def predict_action(self, opencv_data):
-        observation = self._vectorize_data(opencv_data)
-        print(observation)
+    def action(self, action_space, observation, info=None):
+        """Mandatory method that calculates the move based on the observation array and the action space."""
+        _ = observation  # not using the observation for random decision
+        _ = info
+        # print(observation.shape)
+        this_player_action_space = {Action.FOLD, Action.CHECK, Action.CALL, Action.RAISE_POT, Action.RAISE_HALF_POT,
+                                    Action.RAISE_2POT}
+        allowed_actions = list(this_player_action_space.intersection(set(action_space)))
+        if Stage.SHOWDOWN in allowed_actions:
+            allowed_actions.remove(Stage.SHOWDOWN)
+        if Stage.SHOWDOWN.value in allowed_actions:
+            allowed_actions.remove(Stage.SHOWDOWN.value)
         state = torch.FloatTensor(observation).unsqueeze(0)
 
+        # Get Q-values from the policy network for the current state
         with torch.no_grad():
-            q_values = self.model(state).squeeze().numpy()
+            q_values = self.policy_net(state).squeeze().numpy()
 
-        legal_actions = [a.value for a in opencv_data['legal_moves']]
-        masked_q = np.full(self.action_size, -np.inf)
-        for action in legal_actions:
-            if action in self.action_mapping:
-                masked_q[action] = q_values[action]
+        # Filter Q-values to only include valid actions
+        # allowed_actions = list(action_space)
+        # masked_q_values = {action: q_values[action.value] for action in allowed_actions}
+        mask = np.full_like(q_values, -np.inf)
+        for action in allowed_actions:
+            mask[action.value] = q_values[action.value]
+        # Select the action with the highest Q-value among allowed actions
+        action = np.argmax(mask)
 
-        return self.action_mapping[np.argmax(masked_q)]
+        # action = random.choice(list(possible_moves))
+        # print("\n--- Debug Info ---")
+        # print("Q-values:", q_values)
+        # print("Mask:", mask)
+        # print("Allowed actions:", [Action(a).name for a in allowed_actions])
+        return action
 
 
-# Пример использования
+def create_observation_space(data: dict, big_blind: float) -> np.ndarray:
+    """
+    Формирует вектор observation_space из структурированных входных данных
+    с фиксированным размером 328
+    """
+    # Нормализующий множитель
+    norm_factor = big_blind * 100
+
+    # 1. Извлекаем и нормализуем Community Data
+    community = data['community']
+    community_arr = [
+        community['pot'] / norm_factor,
+        community['round_pot'] / norm_factor,
+        community['small_blind'],
+        community['big_blind'],
+        *community['stage_one_hot'],  # one-hot: [preflop, flop, turn, river]
+        *community['legal_moves']  # бинарный вектор доступных действий
+    ]
+
+    # 2. Извлекаем и нормализуем Player Data
+    player = data['player']
+    player_arr = [
+        player['position'],
+        player['equity_alive'],
+        player['equity_2plr'],
+        player['equity_3plr'],
+        player['stack'] / norm_factor
+    ]
+
+    # 3. Обрабатываем Stage Data для всех этапов
+    stage_arr = []
+    for stage in data['stages']:
+        stage_features = [
+            stage['calls'],
+            stage['raises'],
+            stage['min_call'] / norm_factor,
+            stage['contribution'] / norm_factor,
+            stage['stack_at_action'] / norm_factor,
+            stage['community_pot_at_action'] / norm_factor
+        ]
+        stage_arr.extend(stage_features)
+
+    # Объединяем все массивы
+    observation = np.concatenate([
+        np.array(player_arr),
+        np.array(community_arr),
+        np.array(stage_arr)
+    ]).flatten()
+
+    # Замена NaN и приведение к фиксированному размеру
+    observation = np.nan_to_num(observation, nan=0.0)
+    FIXED_SIZE = 328
+
+    if len(observation) < FIXED_SIZE:
+        # Дополняем нулями
+        observation = np.pad(observation, (0, FIXED_SIZE - len(observation)))
+    elif len(observation) > FIXED_SIZE:
+        # Обрезаем до нужного размера
+        observation = observation[:FIXED_SIZE]
+
+    return observation.astype(np.float32)
+
 if __name__ == "__main__":
-    agent = PokerAgent(
-        model_weights_path="models/dqn_fork_50stack_200ep_weights.pth",
-        model_json_path="models/dqn_fork_50stack_200ep_json.json"
+    sample_data = {
+        "community": {
+            "pot": 150.0,
+            "round_pot": 50.0,
+            "small_blind": 1.0,
+            "big_blind": 2.0,
+            "stage_one_hot": [0, 0, 1, 0],
+            "legal_moves": [1, 1, 1, 0, 0, 0, 0, 0, 0, 0]
+        },
+        "player": {
+            "position": 2,
+            "equity_alive": 0.90,
+            "equity_2plr": 0.85,
+            "equity_3plr": 0.80,
+            "stack": 500.0
+        },
+        "stages": [
+            {
+                "calls": 0,  # Колла не было
+                "raises": 0,  # Рейза не было
+                "min_call": 1.0,  # Малый блайнд = 1
+                "contribution": 1.0,  # Взнос игрока 0
+                "stack_at_action": 995.0,  # Был стек 1000, после SB: 995
+                "community_pot_at_action": 1.0  # Банк после SB
+            },
+            {
+                "calls": 0,
+                "raises": 0,
+                "min_call": 2.0,  # BB = 2
+                "contribution": 2.0,
+                "stack_at_action": 998.0,  # Был стек 1000, после BB: 998
+                "community_pot_at_action": 3.0  # SB + BB = 3
+            },
+            {
+                "calls": 0,
+                "raises": 0,
+                "min_call": 2.0,  # BB = 2
+                "contribution": 2.0,
+                "stack_at_action": 998.0,  # Был стек 1000, после BB: 998
+                "community_pot_at_action": 3.0  # SB + BB = 3
+            }
+        ]
+    }
+    # Инициализация агента
+    observation = create_observation_space(sample_data, 2)
+    print(observation,observation.shape)
+    agent = DQNAgent(
+        state_size=observation.shape[0],  # Размер observation вектора
+        action_size=8,  # Количество возможных действий (FOLD=0 ... ALL_IN=7)
+        load_model='models/dqn_fork_50stack_200epp_batch1024_weights.pth'
     )
 
-    opencv_data = {
-        'player_position': 0,
-        'player_stack': 1000,
-        'community_pot': 150,
-        'current_round_pot': 50,
-        'stage': Stage.FLOP,
-        'legal_moves': [Action.FOLD, Action.CALL, Action.RAISE_3BB]
-    }
+    # Пример вызова
 
-    action = agent.predict_action(opencv_data)
-    print(f"Action: {action.name}")
+    action_space = [Action.FOLD, Action.CHECK, Action.RAISE_HALF_POT]  # Допустимые действия (FOLD, CHECK, CALL, RAISE_3BB)
+
+    action = agent.action(action_space, observation, info=None)
+    #print(f"Выбрано действие: {Action(action).name}")
+    print(Action(action).name)

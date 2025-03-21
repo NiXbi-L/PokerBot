@@ -37,13 +37,13 @@ class Player:
             name='DQN',
             load_model=None,
             env=None,
-            gamma=0.9995,
-            lr=0.00005,
-            epsilon=0.6,
+            gamma=0.999,
+            lr=0.0001,
+            epsilon=0.7,
             epsilon_min=0.02,
-            epsilon_decay=0.996,
+            epsilon_decay=0.997,
             memory_limit=50000,
-            batch_size=2048
+            batch_size=1024
     ):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.name = name
@@ -54,8 +54,8 @@ class Player:
         self.epsilon_min = epsilon_min
         self.epsilon_decay = epsilon_decay
         self.memory = deque(maxlen=memory_limit)
-        self.state_size = env.observation_space[0]
-        self.action_size = env.action_space.n
+        self.state_size = 328
+        self.action_size = 8
         self.last_action = None
 
         # Define policy and target networks
@@ -262,10 +262,10 @@ class Player:
         action = np.argmax(mask)
 
         # action = random.choice(list(possible_moves))
-        # print("\n--- Debug Info ---")
-        # print("Q-values:", q_values)
-        # print("Mask:", mask)
-        # print("Allowed actions:", [Action(a).name for a in allowed_actions])
+        print("\n--- Debug Info ---")
+        print("Q-values:", q_values)
+        print("Mask:", mask)
+        print("Allowed actions:", [Action(a).name for a in allowed_actions])
         return action
 
     def replay(self):
