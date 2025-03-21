@@ -65,7 +65,7 @@ class PlayerData:
 class HoldemTable(Env):
     """Pokergame environment"""
 
-    def __init__(self, initial_stacks=5, small_blind=1, big_blind=2, render=False, funds_plot=True,
+    def __init__(self, initial_stacks=5, small_blind=10, big_blind=20, render=False, funds_plot=True,
                  max_raises_per_player_round=2, use_cpp_montecarlo=False, raise_illegal_moves=False,
                  calculate_equity=False):
         """

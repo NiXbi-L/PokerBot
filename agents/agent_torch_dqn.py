@@ -37,13 +37,13 @@ class Player:
             name='DQN',
             load_model=None,
             env=None,
-            gamma=0.9995,
-            lr=0.00005,
-            epsilon=0.6,
+            gamma=0.999,
+            lr=0.0001,
+            epsilon=0.7,
             epsilon_min=0.02,
-            epsilon_decay=0.996,
+            epsilon_decay=0.997,
             memory_limit=50000,
-            batch_size=2048
+            batch_size=1024
     ):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.name = name
