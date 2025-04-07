@@ -37,13 +37,13 @@ class Player:
             name='DQN',
             load_model=None,
             env=None,
-            gamma=0.999,
-            lr=0.0001,
-            epsilon=0.7,
-            epsilon_min=0.02,
-            epsilon_decay=0.997,
-            memory_limit=50000,
-            batch_size=1024
+            gamma=0.995,  # Уменьшен для более быстрого получения наград
+            lr=0.0003,  # Оптимизированная скорость обучения
+            epsilon=0.5,  # Более сбалансированное исследование
+            epsilon_min=0.05,  # Минимальный уровень исследования
+            epsilon_decay=0.9995,  # Медленное затухание исследования
+            memory_limit=100000,  # Увеличенный буфер памяти
+            batch_size=512  # Оптимальный размер батча
     ):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.name = name
@@ -67,6 +67,15 @@ class Player:
         # Load model if specified
         if load_model:
             self.load(f'models/dqn_{load_model}_weights.pth')
+            # Загрузить метаданные
+            with open(f'models/dqn_{load_model}_meta.json', 'r') as f:
+                metadata = json.load(f)
+                self.epsilon = metadata['epsilon']
+                self.start_episode = metadata['episode'] + 1  # Следующий эпизод
+                self.total_steps = metadata['total_steps']
+        else:
+            self.start_episode = 0
+            self.total_steps = 0
 
         # Optimizer
         self.optimizer = optim.Adam(
@@ -96,7 +105,7 @@ class Player:
         writer = SummaryWriter(log_dir=f'{log_dir}/{timestr}')
 
         total_steps = 0
-        for episode in range(500):
+        for episode in range(self.start_episode, self.start_episode + 1500):
             print(f"Episode {episode}")
             state = self.env.reset()
             self.last_action = None
@@ -261,11 +270,11 @@ class Player:
         # Select the action with the highest Q-value among allowed actions
         action = np.argmax(mask)
 
-        # action = random.choice(list(possible_moves))
-        # print("\n--- Debug Info ---")
-        # print("Q-values:", q_values)
-        # print("Mask:", mask)
-        # print("Allowed actions:", [Action(a).name for a in allowed_actions])
+        #action = random.choice(list(possible_moves))
+        print("\n--- Debug Info ---")
+        print("Q-values:", q_values)
+        print("Mask:", mask)
+        print("Allowed actions:", [Action(a).name for a in allowed_actions])
         return action
 
     def replay(self):

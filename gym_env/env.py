@@ -65,7 +65,7 @@ class PlayerData:
 class HoldemTable(Env):
     """Pokergame environment"""
 
-    def __init__(self, initial_stacks=5, small_blind=10, big_blind=20, render=False, funds_plot=True,
+    def __init__(self, initial_stacks=5, small_blind=1, big_blind=2, render=False, funds_plot=True,
                  max_raises_per_player_round=2, use_cpp_montecarlo=False, raise_illegal_moves=False,
                  calculate_equity=False):
         """
@@ -336,78 +336,19 @@ class HoldemTable(Env):
         if self.render_switch:
             self.render()
 
-    # def _calculate_reward(self, last_action):
-    #     _ = last_action
-    #     if self.done:
-    #         won = 1 if not self._agent_is_autoplay(idx=self.winner_ix) else -1
-    #         self.reward = self.initial_stacks * len(self.players) * won
-    #         log.debug(f"Keras-rl agent has reward {self.reward}")
-    #
-    #     elif len(self.funds_history) > 1:
-    #         self.reward = self.funds_history.iloc[-1, self.acting_agent] - self.funds_history.iloc[
-    #             -2, self.acting_agent]
-    #
-    #     else:
-    #         pass
-    #     if self.acting_agent == 0:
-    #         self.total_reward += self.reward
-    #         print("$" * 100)
-    #         print(f"RUNNING REWARD IS {self.total_reward}")
-    #         print("$" * 100)
-    #         print(f"LAST MCTS ACTION WAS {last_action}")
-    #         self.buffer.append([self.array_everything, last_action, self.total_reward, self.done, self.info])
-
-
     def _calculate_reward(self, last_action):
-        equity_threshold = 0.65
-        base_multiplier = 1.5
-        stack_penalty_multiplier = 3
-
-        current_stack = self.funds_history.iloc[-1, self.acting_agent] if len(
-            self.funds_history) > 0 else self.initial_stacks
-        stack_ratio = current_stack / self.initial_stacks
-
+        _ = last_action
         if self.done:
             won = 1 if not self._agent_is_autoplay(idx=self.winner_ix) else -1
             self.reward = self.initial_stacks * len(self.players) * won
-
-            if current_stack <= 0:
-                self.reward -= self.initial_stacks * stack_penalty_multiplier
-            elif stack_ratio < 0.5:
-                self.reward -= self.initial_stacks * (0.5 - stack_ratio) * 0.5
-
-            if self.player_data.equity_to_river_alive > 0.55 \
-                    and last_action == Action.RAISE_3BB \
-                or last_action == Action.RAISE_POT \
-                or last_action == Action.RAISE_HALF_POT \
-                or last_action == Action.RAISE_2POT \
-                or last_action == Action.ALL_IN:
-                self.reward *= 1.2
+            log.debug(f"Keras-rl agent has reward {self.reward}")
 
         elif len(self.funds_history) > 1:
-            delta = current_stack - self.funds_history.iloc[-2, self.acting_agent]
-            current_equity = self.player_data.equity_to_river_alive
+            self.reward = self.funds_history.iloc[-1, self.acting_agent] - self.funds_history.iloc[
+                -2, self.acting_agent]
 
-            if stack_ratio < 0.3:
-                delta -= abs(delta) * (0.3 - stack_ratio) * stack_penalty_multiplier
-
-            if last_action == Action.FOLD and current_equity > equity_threshold:
-                self.reward = -abs(delta) * 2
-            elif self.player_data.equity_to_river_alive > 0.55 \
-                    and last_action == Action.RAISE_3BB \
-                or last_action == Action.RAISE_POT \
-                or last_action == Action.RAISE_HALF_POT \
-                or last_action == Action.RAISE_2POT \
-                or last_action == Action.ALL_IN:
-                self.reward = delta * base_multiplier + (current_equity * 0.5)
-            else:
-                self.reward = delta
-
-            if (current_stack - delta) / self.initial_stacks < 0.2:
-                self.reward -= self.initial_stacks * 0.1
         else:
             pass
-
         if self.acting_agent == 0:
             self.total_reward += self.reward
             print("$" * 100)
@@ -415,6 +356,71 @@ class HoldemTable(Env):
             print("$" * 100)
             print(f"LAST MCTS ACTION WAS {last_action}")
             self.buffer.append([self.array_everything, last_action, self.total_reward, self.done, self.info])
+
+    # def _calculate_reward(self, last_action):
+    #     # Конфигурация параметров по стадиям с использованием имен enum
+    #     STAGE_PARAMS = {
+    #         'preflop': {'equity_threshold': 0.55, 'aggressive_bonus': 1.1},
+    #         'flop': {'equity_threshold': 0.6, 'aggressive_bonus': 1.3},
+    #         'turn': {'equity_threshold': 0.65, 'aggressive_bonus': 1.5},
+    #         'river': {'equity_threshold': 0.7, 'aggressive_bonus': 1.7},
+    #         'showdown': {'equity_threshold': 0.75, 'aggressive_bonus': 1.0}  # Добавил для SHOWDOWN
+    #     }
+    #
+    #     # Получаем имя стадии в нижнем регистре
+    #     current_stage_name = self.stage.name.lower()
+    #     params = STAGE_PARAMS.get(current_stage_name, STAGE_PARAMS['flop'])  # По умолчанию flop
+    #
+    #     current_stack = self.funds_history.iloc[-1, self.acting_agent] if len(
+    #         self.funds_history) > 0 else self.initial_stacks
+    #     stack_ratio = current_stack / self.initial_stacks
+    #     current_equity = self.player_data.equity_to_river_alive
+    #
+    #     reward = 0
+    #     delta = current_stack - self.funds_history.iloc[-2, self.acting_agent] if len(self.funds_history) > 1 else 0
+    #
+    #     # Основные правила награды
+    #     if self.done:
+    #         reward = current_stack - self.initial_stacks  # Чистый выигрыш за игру
+    #         if current_equity > params['equity_threshold'] and self.stage != Stage.SHOWDOWN:
+    #             reward *= 1.2  # Бонус за доведение сильной руки до конца
+    #     else:
+    #         # Базовое изменение стека
+    #         reward = delta * 2.0
+    #
+    #         # Модификаторы на основе действий
+    #         if last_action == Action.FOLD:
+    #             if current_equity > params['equity_threshold']:
+    #                 reward -= abs(delta) * 3.0  # Сильный штраф за фолд сильной руки
+    #             else:
+    #                 reward += abs(delta) * 0.5  # Небольшое поощрение за правильный фолд
+    #
+    #         elif last_action in [Action.RAISE_3BB, Action.RAISE_POT]:
+    #             if current_equity > params['equity_threshold']:
+    #                 reward += abs(delta) * params['aggressive_bonus']
+    #             else:
+    #                 reward -= abs(delta) * (params['equity_threshold'] - current_equity)
+    #
+    #         # Штраф за пассивность с сильной рукой
+    #         if last_action in [Action.CHECK, Action.CALL] and current_equity > params['equity_threshold'] + 0.15:
+    #             reward -= abs(delta) * 0.7
+    #
+    #     # Исключаем END_HIDDEN из расчета наград
+    #     if self.stage == Stage.END_HIDDEN:
+    #         reward = 0  # или другая логика для этой стадии
+    #
+    #     # Динамическая нормализация
+    #     max_stacks = self.initial_stacks * (len(self.players) - 1)
+    #     normalized_reward = reward / max_stacks if max_stacks != 0 else 0
+    #
+    #     self.reward = normalized_reward
+    #
+    #     # Логирование для отладки
+    #     if self.acting_agent == 0:
+    #         self.total_reward += self.reward
+    #         print(f"Current Reward: {self.reward:.2f}, Total: {self.total_reward:.2f}")
+    #         print(f"Action: {last_action}, Equity: {current_equity:.2f}, Stack: {current_stack}/{self.initial_stacks}")
+    #         self.buffer.append([self.array_everything, last_action, self.reward, self.done, self.info])
 
 
     # def _calculate_reward(self, last_action):

@@ -193,20 +193,22 @@ class SelfPlay:
         # from agents.agent_keras_rl_dqn import Player as DQNPlayer
         from agents.agent_torch_dqn import Player as DQNPlayer
         from agents.agent_random import Player as RandomPlayer
+        from agents.AI_play import Player as AI
         env_name = 'neuron_poker-v0'
-        self.env = gym.make(env_name, initial_stacks=20, funds_plot=self.funds_plot, render=self.render,
+        self.env = gym.make(env_name, initial_stacks=10, funds_plot=self.funds_plot, render=self.render,
                        use_cpp_montecarlo=self.use_cpp_montecarlo)
 
         np.random.seed(123)
         self.env.seed(123)
-        self.env.add_player(EquityPlayer(name='equity/50/50', min_call_equity=.5, min_bet_equity=.5))
+        #self.env.add_player(EquityPlayer(name='equity/50/50', min_call_equity=.5, min_bet_equity=.5))
         self.env.add_player(RandomPlayer())
-        #self.env.add_player(EquityPlayer(name='equity/50/80', min_call_equity=.8, min_bet_equity=.8))
-        self.env.add_player(EquityPlayer(name='equity/70/70', min_call_equity=.7, min_bet_equity=.7))
+        self.env.add_player(EquityPlayer(name='equity/50/80', min_call_equity=.8, min_bet_equity=.8))
+        self.env.add_player(AI(name='new_reward_calc', load_model='fork_50stack_200epp_new_reward_calc'))
+        self.env.add_player(AI(name='new_reward_calc', load_model='raiser_newreward_ep490_ep980'))
         self.env.add_player(PlayerShell(name=model_name, stack_size=10))
         #self.env.add_player(EquityPlayer(name='equity/20/30', min_call_equity=.2, min_bet_equity=.3))
-        self.env.add_player(EquityPlayer(name='equity/60/40', min_call_equity=.6, min_bet_equity=.4))
-        self.env.add_player(RandomPlayer())
+        #self.env.add_player(EquityPlayer(name='equity/60/40', min_call_equity=.6, min_bet_equity=.4))
+        self.env.add_player(AI(name='batch1024_0001sp', load_model='fork_50stack_200epp_batch1024_0001sp'))
         # self.env.add_player(RandomPlayer())
         # self.env.add_player(RandomPlayer())
         # self.env.add_player(RandomPlayer())
@@ -253,8 +255,8 @@ class SelfPlay:
         #self.env.add_player(EquityPlayer(name='equity/50/50', min_call_equity=.5, min_bet_equity=.5))
         #self.env.add_player(EquityPlayer(name='equity/50/80', min_call_equity=.8, min_bet_equity=.8))
         self.env.add_player(AI(name='batch1024_0001sp', load_model='fork_50stack_200epp_batch1024_0001sp'))
-        self.env.add_player(AI(name='raiser2', load_model='raiser2_ep30'))
-        self.env.add_player(AI(name='raiser', load_model='raiser_ep50'))
+        self.env.add_player(AI(name='raiser2', load_model='raiser_ep310'))
+        self.env.add_player(AI(name='raiser', load_model='raiser_ep310'))
         #self.env.add_player(EquityPlayer(name='equity/70/70', min_call_equity=.7, min_bet_equity=.7))
         self.env.add_player(AI(name='new_reward_calc', load_model='fork_50stack_200epp_new_reward_calc'))
         #self.env.add_player(EquityPlayer(name='equity/20/30', min_call_equity=.2, min_bet_equity=.3))
